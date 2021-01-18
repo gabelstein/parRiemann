@@ -4,7 +4,7 @@ import numpy as np
 from parriemann.utils.mean import (mean_riemann, mean_euclid, mean_logeuclid,
                                    mean_logdet, mean_ale, mean_identity,
                                    mean_covariance, mean_kullback_sym,
-                                   mean_harmonic, mean_wasserstein, _mean)
+                                   mean_harmonic, mean_wasserstein)
 
 
 def generate_cov(Nt, Ne):
@@ -17,13 +17,6 @@ def generate_cov(Nt, Ne):
     for i in range(Nt):
         covmats[i] = np.dot(np.dot(A, np.diag(diags[i])), A.T)
     return covmats, diags, A
-
-
-def test_mean_helper():
-    """Test the riemannian mean"""
-    covmats, diags, A = generate_cov(100, 3)
-    C = _mean(covmats)
-    assert_array_almost_equal(C, np.mean(covmats, axis=0))
 
 
 def test_riemann_mean():

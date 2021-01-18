@@ -30,7 +30,7 @@ def mean_riemann(covmats, tol=10e-9, maxiter=50, init=None,
     sample_weight = _get_sample_weight(sample_weight, covmats)
     Nt, Ne, Ne = covmats.shape
     if init is None:
-        C = _mean(covmats)
+        C = mean_euclid(covmats)
     else:
         C = init
     k = 0
@@ -149,7 +149,7 @@ def mean_logdet(covmats, tol=10e-5, maxiter=50, init=None, sample_weight=None):
     sample_weight = _get_sample_weight(sample_weight, covmats)
     Nt, Ne, Ne = covmats.shape
     if init is None:
-        C = _mean(covmats)
+        C = mean_euclid(covmats)
     else:
         C = init
     k = 0
@@ -198,7 +198,7 @@ def mean_wasserstein(covmats, tol=10e-4, maxiter=50, init=None,
     sample_weight = _get_sample_weight(sample_weight, covmats)
     Nt, Ne, Ne = covmats.shape
     if init is None:
-        C = _mean(covmats)
+        C = mean_euclid(covmats)
     else:
         C = init
     k = 0
@@ -222,6 +222,7 @@ def mean_wasserstein(covmats, tol=10e-4, maxiter=50, init=None,
     return C
 
 
+@njit(parallel=True)
 def mean_euclid(covmats, sample_weight=None):
     """Return the mean covariance matrix according to the euclidean metric :
 
@@ -234,7 +235,12 @@ def mean_euclid(covmats, sample_weight=None):
     :returns: the mean covariance matrix
 
     """
-    return numpy.average(covmats, axis=0, weights=sample_weight)
+    sample_weight = _get_sample_weight(sample_weight, covmats)
+    Nt, Ne, Ne = covmats.shape
+    mean = numpy.zeros((Ne, Ne))
+    for index in prange(Nt):
+        mean += covmats[index] * sample_weight[index]
+    return mean
 
 
 def mean_ale(covmats, tol=10e-7, maxiter=50, sample_weight=None):
@@ -373,14 +379,3 @@ def _get_sample_weight_not_None(sample_weight, data):
         raise ValueError("len of sample_weight must be equal to len of data.")
     sample_weight /= numpy.sum(sample_weight)
     return sample_weight
-
-
-@njit(parallel=True)
-def _mean(data):
-    """Helper function needed for numba
-    """
-    Nt, Ne, Ne = data.shape
-    mean = numpy.zeros((Ne, Ne))
-    for index in prange(Nt):
-        mean += data[index]/Nt
-    return mean
