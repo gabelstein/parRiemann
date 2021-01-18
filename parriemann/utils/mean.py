@@ -104,6 +104,7 @@ def mean_kullback_sym(covmats, sample_weight=None):
 
     return C
 
+
 @njit(parallel=True)
 def mean_harmonic(covmats, sample_weight=None):
     """Return the harmonic mean of a set of covariance matrices.
@@ -127,6 +128,7 @@ def mean_harmonic(covmats, sample_weight=None):
     return C
 
 
+@njit(parallel=True)
 def mean_logdet(covmats, tol=10e-5, maxiter=50, init=None, sample_weight=None):
     """Return the mean covariance matrix according to the logdet metric.
 
@@ -147,7 +149,7 @@ def mean_logdet(covmats, tol=10e-5, maxiter=50, init=None, sample_weight=None):
     sample_weight = _get_sample_weight(sample_weight, covmats)
     Nt, Ne, Ne = covmats.shape
     if init is None:
-        C = numpy.mean(covmats, axis=0)
+        C = _mean(covmats)
     else:
         C = init
     k = 0
@@ -157,14 +159,13 @@ def mean_logdet(covmats, tol=10e-5, maxiter=50, init=None, sample_weight=None):
         k = k + 1
 
         J = numpy.zeros((Ne, Ne))
+        for index in prange(Nt):
+            J += sample_weight[index] * invm(0.5 * covmats[index] + 0.5 * C)
 
-        for index, Ci in enumerate(covmats):
-            J += sample_weight[index] * numpy.linalg.inv(0.5 * Ci + 0.5 * C)
-
-        Cnew = numpy.linalg.inv(J)
-        crit = numpy.linalg.norm(Cnew - C, ord='fro')
-
+        Cnew = invm(J)
+        crit = numpy.linalg.norm(Cnew - C)
         C = Cnew
+
     return C
 
 
