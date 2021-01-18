@@ -1,5 +1,6 @@
 """Mean covariance estimation."""
 import numpy
+from numba import njit, prange
 
 from .base import sqrtm, invsqrtm, logm, expm
 from .ajd import ajd_pham
@@ -7,19 +8,7 @@ from .distance import distance_riemann
 from .geodesic import geodesic_riemann
 
 
-def _get_sample_weight(sample_weight, data):
-    """Get the sample weights.
-
-    If none provided, weights init to 1. otherwise, weights are normalized.
-    """
-    if sample_weight is None:
-        sample_weight = numpy.ones(data.shape[0])
-    if len(sample_weight) != data.shape[0]:
-        raise ValueError("len of sample_weight must be equal to len of data.")
-    sample_weight /= numpy.sum(sample_weight)
-    return sample_weight
-
-
+@njit(parallel=True)
 def mean_riemann(covmats, tol=10e-9, maxiter=50, init=None,
                  sample_weight=None):
     """Return the mean covariance matrix according to the Riemannian metric.
@@ -56,7 +45,7 @@ def mean_riemann(covmats, tol=10e-9, maxiter=50, init=None,
         Cm12 = invsqrtm(C)
         J = numpy.zeros((Ne, Ne))
 
-        for index in range(Nt):
+        for index in prange(Nt):
             tmp = numpy.dot(numpy.dot(Cm12, covmats[index, :, :]), Cm12)
             J += sample_weight[index] * logm(tmp)
 
@@ -353,3 +342,33 @@ def _check_mean_method(method):
     elif not hasattr(method, '__call__'):
         raise ValueError('mean method must be a function or a string.')
     return method
+
+
+@njit
+def _get_sample_weight(sample_weight, data):
+    """Get the sample weights.
+
+    If none provided, weights init to 1. otherwise, weights are normalized.
+    """
+    if sample_weight is None:
+        return _get_sample_weight_None(data)
+    else:
+        return _get_sample_weight_not_None(sample_weight, data)
+
+@njit
+def _get_sample_weight_None(data):
+    """Helper function needed for numba
+    """
+    sample_weight = numpy.ones(data.shape[0])
+    sample_weight /= numpy.sum(sample_weight)
+    return sample_weight
+
+
+@njit
+def _get_sample_weight_not_None(sample_weight, data):
+    """Helper function needed for numba
+    """
+    if (sample_weight).size != data.shape[0]:
+        raise ValueError("len of sample_weight must be equal to len of data.")
+    sample_weight /= numpy.sum(sample_weight)
+    return sample_weight

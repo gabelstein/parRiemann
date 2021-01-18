@@ -1,8 +1,5 @@
 import numpy
-import scipy
-from numba import njit, float32, float64, generated_jit, typeof
-import numba
-from numpy.core.numerictypes import typecodes
+from numba import njit
 
 @njit
 def _check_mat(Ci):
