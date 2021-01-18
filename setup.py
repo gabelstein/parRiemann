@@ -1,0 +1,12 @@
+from setuptools import setup, find_packages
+
+setup(name='parriemann',
+      version='0.2.6',
+      description='Riemannian Geometry for python',
+      url='',
+      author='Alexandre Barachant',
+      author_email='alexandre.barachant@gmail.com',
+      license='BSD (3-clause)',
+      packages=find_packages(),
+      install_requires=['numpy', 'scipy', 'scikit-learn',  'joblib', 'pandas', 'numba'],
+      zip_safe=False)
