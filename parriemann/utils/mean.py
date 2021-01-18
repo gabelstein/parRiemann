@@ -169,6 +169,7 @@ def mean_logdet(covmats, tol=10e-5, maxiter=50, init=None, sample_weight=None):
     return C
 
 
+@njit(parallel=True)
 def mean_wasserstein(covmats, tol=10e-4, maxiter=50, init=None,
                      sample_weight=None):
     """Return the mean covariance matrix according to the wasserstein metric.
@@ -197,7 +198,7 @@ def mean_wasserstein(covmats, tol=10e-4, maxiter=50, init=None,
     sample_weight = _get_sample_weight(sample_weight, covmats)
     Nt, Ne, Ne = covmats.shape
     if init is None:
-        C = numpy.mean(covmats, axis=0)
+        C = _mean(covmats)
     else:
         C = init
     k = 0
@@ -209,12 +210,16 @@ def mean_wasserstein(covmats, tol=10e-4, maxiter=50, init=None,
 
         J = numpy.zeros((Ne, Ne))
 
-        for index, Ci in enumerate(covmats):
+        """for index, Ci in enumerate(covmats):
             tmp = numpy.dot(numpy.dot(K, Ci), K)
+            J += sample_weight[index] * sqrtm(tmp)"""
+
+        for index in range(Nt):
+            tmp = numpy.dot(numpy.dot(K, covmats[index]), K)
             J += sample_weight[index] * sqrtm(tmp)
 
         Knew = sqrtm(J)
-        crit = numpy.linalg.norm(Knew - K, ord='fro')
+        crit = numpy.linalg.norm(Knew - K)
         K = Knew
     if k == maxiter:
         print('Max iter reach')
