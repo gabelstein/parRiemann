@@ -2,7 +2,7 @@
 import numpy
 from numba import njit, prange
 
-from .base import sqrtm, invsqrtm, logm, expm
+from .base import sqrtm, invsqrtm, logm, expm, invm, _check_mat
 from .ajd import ajd_pham
 from .distance import distance_riemann
 from .geodesic import geodesic_riemann
@@ -27,11 +27,10 @@ def mean_riemann(covmats, tol=10e-9, maxiter=50, init=None,
     :returns: the mean covariance matrix
 
     """
-    # init
     sample_weight = _get_sample_weight(sample_weight, covmats)
     Nt, Ne, Ne = covmats.shape
     if init is None:
-        C = numpy.mean(covmats, axis=0)
+        C = _mean(covmats)
     else:
         C = init
     k = 0
@@ -43,13 +42,13 @@ def mean_riemann(covmats, tol=10e-9, maxiter=50, init=None,
         k = k + 1
         C12 = sqrtm(C)
         Cm12 = invsqrtm(C)
+        _check_mat(Cm12)
         J = numpy.zeros((Ne, Ne))
-
         for index in prange(Nt):
-            tmp = numpy.dot(numpy.dot(Cm12, covmats[index, :, :]), Cm12)
+            tmp = numpy.dot(numpy.dot(Cm12, covmats[index]), Cm12)
             J += sample_weight[index] * logm(tmp)
 
-        crit = numpy.linalg.norm(J, ord='fro')
+        crit = numpy.linalg.norm(J)
         h = nu * crit
         C = numpy.dot(numpy.dot(C12, expm(nu * J)), C12)
         if h < tau:
@@ -61,6 +60,7 @@ def mean_riemann(covmats, tol=10e-9, maxiter=50, init=None,
     return C
 
 
+@njit(parallel=True)
 def mean_logeuclid(covmats, sample_weight=None):
     """Return the mean covariance matrix according to the log-euclidean metric.
 
@@ -76,7 +76,7 @@ def mean_logeuclid(covmats, sample_weight=None):
     sample_weight = _get_sample_weight(sample_weight, covmats)
     Nt, Ne, Ne = covmats.shape
     T = numpy.zeros((Ne, Ne))
-    for index in range(Nt):
+    for index in prange(Nt):
         T += sample_weight[index] * logm(covmats[index, :, :])
     C = expm(T)
 
@@ -104,7 +104,7 @@ def mean_kullback_sym(covmats, sample_weight=None):
 
     return C
 
-
+@njit(parallel=True)
 def mean_harmonic(covmats, sample_weight=None):
     """Return the harmonic mean of a set of covariance matrices.
 
@@ -120,9 +120,9 @@ def mean_harmonic(covmats, sample_weight=None):
     sample_weight = _get_sample_weight(sample_weight, covmats)
     Nt, Ne, Ne = covmats.shape
     T = numpy.zeros((Ne, Ne))
-    for index in range(Nt):
-        T += sample_weight[index] * numpy.linalg.inv(covmats[index, :, :])
-    C = numpy.linalg.inv(T)
+    for index in prange(Nt):
+        T += sample_weight[index] * invm(covmats[index])
+    C = invm(T)
 
     return C
 
@@ -372,3 +372,14 @@ def _get_sample_weight_not_None(sample_weight, data):
         raise ValueError("len of sample_weight must be equal to len of data.")
     sample_weight /= numpy.sum(sample_weight)
     return sample_weight
+
+
+@njit(parallel=True)
+def _mean(data):
+    """Helper function needed for numba
+    """
+    Nt, Ne, Ne = data.shape
+    mean = numpy.zeros((Ne, Ne))
+    for index in prange(Nt):
+        mean += data[index]/Nt
+    return mean
