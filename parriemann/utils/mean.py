@@ -209,11 +209,6 @@ def mean_wasserstein(covmats, tol=10e-4, maxiter=50, init=None,
         k = k + 1
 
         J = numpy.zeros((Ne, Ne))
-
-        """for index, Ci in enumerate(covmats):
-            tmp = numpy.dot(numpy.dot(K, Ci), K)
-            J += sample_weight[index] * sqrtm(tmp)"""
-
         for index in range(Nt):
             tmp = numpy.dot(numpy.dot(K, covmats[index]), K)
             J += sample_weight[index] * sqrtm(tmp)
