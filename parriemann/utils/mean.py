@@ -83,6 +83,7 @@ def mean_logeuclid(covmats, sample_weight=None):
     return C
 
 
+@njit
 def mean_kullback_sym(covmats, sample_weight=None):
     """Return the mean covariance matrix according to KL divergence.
 
