@@ -2,7 +2,8 @@ import numpy as np
 from nose.tools import assert_raises
 from numpy.testing import assert_array_almost_equal
 from parriemann.utils.mean import mean_riemann
-from parriemann.utils.base import (sqrtm, invsqrtm, logm, expm, powm)
+from parriemann.utils.base import (sqrtm, invsqrtm, logm, expm, powm, invm)
+from sklearn.datasets import make_spd_matrix
 
 
 def test_sqrtm():
@@ -38,6 +39,12 @@ def test_powm():
     C = 2*np.eye(3)
     Ctrue = (2**0.5)*np.eye(3)
     assert_array_almost_equal(powm(C, 0.5), Ctrue)
+
+
+def test_invm():
+    """Test matrix inversion"""
+    C = make_spd_matrix(10)
+    assert_array_almost_equal(invm(C), np.linalg.inv(C))
 
 
 def test_check_raise():

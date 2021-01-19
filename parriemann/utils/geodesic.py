@@ -1,5 +1,5 @@
 import numpy
-
+from numba import njit
 from .base import sqrtm, invsqrtm, powm, logm, expm
 
 ###############################################################
@@ -25,6 +25,7 @@ def geodesic(A, B, alpha, metric='riemann'):
     return C
 
 
+@njit
 def geodesic_riemann(A, B, alpha=0.5):
     """Return the matrix at the position alpha on the riemannian geodesic between A and B  :
 

@@ -1,7 +1,8 @@
 from numpy.testing import assert_array_almost_equal, assert_array_equal
 import numpy as np
+from time import time
 
-from parriemann.utils.ajd import rjd, ajd_pham, uwedge
+from parriemann.utils.ajd import rjd, ajd_pham, uwedge, _concatenate
 
 
 def generate_cov(Nt, Ne):
@@ -14,6 +15,12 @@ def generate_cov(Nt, Ne):
     for i in range(Nt):
         covmats[i] = np.dot(np.dot(A, np.diag(diags[i])), A.T)
     return covmats, diags, A
+
+
+def test_concatenate_helper():
+    """Test rjd"""
+    covmats, diags, A = generate_cov(100, 3)
+    assert_array_equal(_concatenate(covmats), np.concatenate(covmats, axis=0))
 
 
 def test_rjd():

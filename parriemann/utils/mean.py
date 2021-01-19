@@ -1,25 +1,14 @@
 """Mean covariance estimation."""
 import numpy
+from numba import njit, prange
 
-from .base import sqrtm, invsqrtm, logm, expm
+from .base import sqrtm, invsqrtm, logm, expm, invm, _check_mat
 from .ajd import ajd_pham
 from .distance import distance_riemann
 from .geodesic import geodesic_riemann
 
 
-def _get_sample_weight(sample_weight, data):
-    """Get the sample weights.
-
-    If none provided, weights init to 1. otherwise, weights are normalized.
-    """
-    if sample_weight is None:
-        sample_weight = numpy.ones(data.shape[0])
-    if len(sample_weight) != data.shape[0]:
-        raise ValueError("len of sample_weight must be equal to len of data.")
-    sample_weight /= numpy.sum(sample_weight)
-    return sample_weight
-
-
+@njit(parallel=True)
 def mean_riemann(covmats, tol=10e-9, maxiter=50, init=None,
                  sample_weight=None):
     """Return the mean covariance matrix according to the Riemannian metric.
@@ -38,11 +27,10 @@ def mean_riemann(covmats, tol=10e-9, maxiter=50, init=None,
     :returns: the mean covariance matrix
 
     """
-    # init
     sample_weight = _get_sample_weight(sample_weight, covmats)
     Nt, Ne, Ne = covmats.shape
     if init is None:
-        C = numpy.mean(covmats, axis=0)
+        C = mean_euclid(covmats)
     else:
         C = init
     k = 0
@@ -54,13 +42,13 @@ def mean_riemann(covmats, tol=10e-9, maxiter=50, init=None,
         k = k + 1
         C12 = sqrtm(C)
         Cm12 = invsqrtm(C)
+        _check_mat(Cm12)
         J = numpy.zeros((Ne, Ne))
-
-        for index in range(Nt):
-            tmp = numpy.dot(numpy.dot(Cm12, covmats[index, :, :]), Cm12)
+        for index in prange(Nt):
+            tmp = numpy.dot(numpy.dot(Cm12, covmats[index]), Cm12)
             J += sample_weight[index] * logm(tmp)
 
-        crit = numpy.linalg.norm(J, ord='fro')
+        crit = numpy.linalg.norm(J)
         h = nu * crit
         C = numpy.dot(numpy.dot(C12, expm(nu * J)), C12)
         if h < tau:
@@ -72,6 +60,7 @@ def mean_riemann(covmats, tol=10e-9, maxiter=50, init=None,
     return C
 
 
+@njit(parallel=True)
 def mean_logeuclid(covmats, sample_weight=None):
     """Return the mean covariance matrix according to the log-euclidean metric.
 
@@ -87,13 +76,14 @@ def mean_logeuclid(covmats, sample_weight=None):
     sample_weight = _get_sample_weight(sample_weight, covmats)
     Nt, Ne, Ne = covmats.shape
     T = numpy.zeros((Ne, Ne))
-    for index in range(Nt):
+    for index in prange(Nt):
         T += sample_weight[index] * logm(covmats[index, :, :])
     C = expm(T)
 
     return C
 
 
+@njit
 def mean_kullback_sym(covmats, sample_weight=None):
     """Return the mean covariance matrix according to KL divergence.
 
@@ -116,6 +106,7 @@ def mean_kullback_sym(covmats, sample_weight=None):
     return C
 
 
+@njit(parallel=True)
 def mean_harmonic(covmats, sample_weight=None):
     """Return the harmonic mean of a set of covariance matrices.
 
@@ -131,13 +122,14 @@ def mean_harmonic(covmats, sample_weight=None):
     sample_weight = _get_sample_weight(sample_weight, covmats)
     Nt, Ne, Ne = covmats.shape
     T = numpy.zeros((Ne, Ne))
-    for index in range(Nt):
-        T += sample_weight[index] * numpy.linalg.inv(covmats[index, :, :])
-    C = numpy.linalg.inv(T)
+    for index in prange(Nt):
+        T += sample_weight[index] * invm(covmats[index])
+    C = invm(T)
 
     return C
 
 
+@njit(parallel=True)
 def mean_logdet(covmats, tol=10e-5, maxiter=50, init=None, sample_weight=None):
     """Return the mean covariance matrix according to the logdet metric.
 
@@ -158,7 +150,7 @@ def mean_logdet(covmats, tol=10e-5, maxiter=50, init=None, sample_weight=None):
     sample_weight = _get_sample_weight(sample_weight, covmats)
     Nt, Ne, Ne = covmats.shape
     if init is None:
-        C = numpy.mean(covmats, axis=0)
+        C = mean_euclid(covmats)
     else:
         C = init
     k = 0
@@ -168,17 +160,17 @@ def mean_logdet(covmats, tol=10e-5, maxiter=50, init=None, sample_weight=None):
         k = k + 1
 
         J = numpy.zeros((Ne, Ne))
+        for index in prange(Nt):
+            J += sample_weight[index] * invm(0.5 * covmats[index] + 0.5 * C)
 
-        for index, Ci in enumerate(covmats):
-            J += sample_weight[index] * numpy.linalg.inv(0.5 * Ci + 0.5 * C)
-
-        Cnew = numpy.linalg.inv(J)
-        crit = numpy.linalg.norm(Cnew - C, ord='fro')
-
+        Cnew = invm(J)
+        crit = numpy.linalg.norm(Cnew - C)
         C = Cnew
+
     return C
 
 
+@njit(parallel=True)
 def mean_wasserstein(covmats, tol=10e-4, maxiter=50, init=None,
                      sample_weight=None):
     """Return the mean covariance matrix according to the wasserstein metric.
@@ -207,7 +199,7 @@ def mean_wasserstein(covmats, tol=10e-4, maxiter=50, init=None,
     sample_weight = _get_sample_weight(sample_weight, covmats)
     Nt, Ne, Ne = covmats.shape
     if init is None:
-        C = numpy.mean(covmats, axis=0)
+        C = mean_euclid(covmats)
     else:
         C = init
     k = 0
@@ -218,13 +210,12 @@ def mean_wasserstein(covmats, tol=10e-4, maxiter=50, init=None,
         k = k + 1
 
         J = numpy.zeros((Ne, Ne))
-
-        for index, Ci in enumerate(covmats):
-            tmp = numpy.dot(numpy.dot(K, Ci), K)
+        for index in prange(Nt):
+            tmp = numpy.dot(numpy.dot(K, covmats[index]), K)
             J += sample_weight[index] * sqrtm(tmp)
 
         Knew = sqrtm(J)
-        crit = numpy.linalg.norm(Knew - K, ord='fro')
+        crit = numpy.linalg.norm(Knew - K)
         K = Knew
     if k == maxiter:
         print('Max iter reach')
@@ -232,6 +223,7 @@ def mean_wasserstein(covmats, tol=10e-4, maxiter=50, init=None,
     return C
 
 
+@njit(parallel=True)
 def mean_euclid(covmats, sample_weight=None):
     """Return the mean covariance matrix according to the euclidean metric :
 
@@ -244,9 +236,15 @@ def mean_euclid(covmats, sample_weight=None):
     :returns: the mean covariance matrix
 
     """
-    return numpy.average(covmats, axis=0, weights=sample_weight)
+    sample_weight = _get_sample_weight(sample_weight, covmats)
+    Nt, Ne, Ne = covmats.shape
+    mean = numpy.zeros((Ne, Ne))
+    for index in prange(Nt):
+        mean += covmats[index] * sample_weight[index]
+    return mean
 
 
+@njit(parallel=True)
 def mean_ale(covmats, tol=10e-7, maxiter=50, sample_weight=None):
     """Return the mean covariance matrix according using the AJD-based
     log-Euclidean Mean (ALE). See [1].
@@ -280,8 +278,8 @@ def mean_ale(covmats, tol=10e-7, maxiter=50, sample_weight=None):
         k += 1
         J = numpy.zeros((Ne, Ne))
 
-        for index, Ci in enumerate(covmats):
-            tmp = logm(numpy.dot(numpy.dot(B.T, Ci), B))
+        for index in prange(Nt):
+            tmp = logm(numpy.dot(numpy.dot(B.T, covmats[index]), B))
             J += sample_weight[index] * tmp
 
         update = numpy.diag(numpy.diag(expm(J)))
@@ -292,14 +290,15 @@ def mean_ale(covmats, tol=10e-7, maxiter=50, sample_weight=None):
     A = numpy.linalg.inv(B)
 
     J = numpy.zeros((Ne, Ne))
-    for index, Ci in enumerate(covmats):
-        tmp = logm(numpy.dot(numpy.dot(B.T, Ci), B))
+    for index in prange(Nt):
+        tmp = logm(numpy.dot(numpy.dot(B.T, covmats[index]), B))
         J += sample_weight[index] * tmp
 
     C = numpy.dot(numpy.dot(A.T, expm(J)), A)
     return C
 
 
+@njit
 def mean_identity(covmats, sample_weight=None):
     """Return the identity matrix corresponding to the covmats sit size
 
@@ -353,3 +352,33 @@ def _check_mean_method(method):
     elif not hasattr(method, '__call__'):
         raise ValueError('mean method must be a function or a string.')
     return method
+
+
+@njit
+def _get_sample_weight(sample_weight, data):
+    """Get the sample weights.
+
+    If none provided, weights init to 1. otherwise, weights are normalized.
+    """
+    if sample_weight is None:
+        return _get_sample_weight_None(data)
+    else:
+        return _get_sample_weight_not_None(sample_weight, data)
+
+@njit
+def _get_sample_weight_None(data):
+    """Helper function needed for numba
+    """
+    sample_weight = numpy.ones(data.shape[0])
+    sample_weight /= numpy.sum(sample_weight)
+    return sample_weight
+
+
+@njit
+def _get_sample_weight_not_None(sample_weight, data):
+    """Helper function needed for numba
+    """
+    if (sample_weight).size != data.shape[0]:
+        raise ValueError("len of sample_weight must be equal to len of data.")
+    sample_weight /= numpy.sum(sample_weight)
+    return sample_weight

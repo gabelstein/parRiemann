@@ -1,8 +1,5 @@
 import numpy
-import scipy
-from numba import njit, float32, float64, generated_jit, typeof
-import numba
-from numpy.core.numerictypes import typecodes
+from numba import njit
 
 @njit
 def _check_mat(Ci):
@@ -36,6 +33,25 @@ def sqrtm(Ci):
 
     """
     return _matrix_operator(Ci, numpy.sqrt)
+
+
+@njit
+def invm(Ci):
+    """Return the matrix square root of a covariance matrix defined by :
+
+    .. math::
+            \mathbf{C} = \mathbf{V} \left( \mathbf{\Lambda} \\right)^{1/2} \mathbf{V}^T
+
+    where :math:`\mathbf{\Lambda}` is the diagonal matrix of eigenvalues
+    and :math:`\mathbf{V}` the eigenvectors of :math:`\mathbf{Ci}`
+
+    :param Ci: the coavriance matrix
+    :returns: the matrix square root
+
+    """
+    #inv = lambda x: 1. / x
+
+    return _matrix_operator(Ci, numpy.reciprocal)
 
 
 @njit
