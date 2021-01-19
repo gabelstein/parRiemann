@@ -209,7 +209,7 @@ def mean_wasserstein(covmats, tol=10e-4, maxiter=50, init=None,
         k = k + 1
 
         J = numpy.zeros((Ne, Ne))
-        for index in range(Nt):
+        for index in prange(Nt):
             tmp = numpy.dot(numpy.dot(K, covmats[index]), K)
             J += sample_weight[index] * sqrtm(tmp)
 
@@ -243,7 +243,7 @@ def mean_euclid(covmats, sample_weight=None):
     return mean
 
 
-
+@njit(parallel=True)
 def mean_ale(covmats, tol=10e-7, maxiter=50, sample_weight=None):
     """Return the mean covariance matrix according using the AJD-based
     log-Euclidean Mean (ALE). See [1].
@@ -277,8 +277,8 @@ def mean_ale(covmats, tol=10e-7, maxiter=50, sample_weight=None):
         k += 1
         J = numpy.zeros((Ne, Ne))
 
-        for index, Ci in enumerate(covmats):
-            tmp = logm(numpy.dot(numpy.dot(B.T, Ci), B))
+        for index in prange(Nt):
+            tmp = logm(numpy.dot(numpy.dot(B.T, covmats[index]), B))
             J += sample_weight[index] * tmp
 
         update = numpy.diag(numpy.diag(expm(J)))
@@ -289,8 +289,8 @@ def mean_ale(covmats, tol=10e-7, maxiter=50, sample_weight=None):
     A = numpy.linalg.inv(B)
 
     J = numpy.zeros((Ne, Ne))
-    for index, Ci in enumerate(covmats):
-        tmp = logm(numpy.dot(numpy.dot(B.T, Ci), B))
+    for index in prange(Nt):
+        tmp = logm(numpy.dot(numpy.dot(B.T, covmats[index]), B))
         J += sample_weight[index] * tmp
 
     C = numpy.dot(numpy.dot(A.T, expm(J)), A)
