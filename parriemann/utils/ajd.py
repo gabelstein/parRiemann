@@ -1,5 +1,6 @@
 """Aproximate joint diagonalization algorithm."""
 import numpy as np
+from numba import njit, prange
 
 
 def rjd(X, eps=1e-8, n_iter_max=1000):
@@ -90,6 +91,7 @@ def rjd(X, eps=1e-8, n_iter_max=1000):
     return V, D
 
 
+@njit
 def ajd_pham(X, eps=1e-6, n_iter_max=15):
     """Approximate joint diagonalization based on pham's algorithm.
 
@@ -131,7 +133,7 @@ def ajd_pham(X, eps=1e-6, n_iter_max=15):
     n_epochs = X.shape[0]
 
     # Reshape input matrix
-    A = np.concatenate(X, axis=0).T
+    A = _concatenate(X).T
 
     # Init variables
     n_times, n_m = A.shape
@@ -145,11 +147,11 @@ def ajd_pham(X, eps=1e-6, n_iter_max=15):
                 Ii = np.arange(ii, n_m, n_times)
                 Ij = np.arange(jj, n_m, n_times)
 
-                c1 = A[ii, Ii]
-                c2 = A[jj, Ij]
+                c1 = A[ii][Ii]
+                c2 = A[jj][Ij]
 
-                g12 = np.mean(A[ii, Ij] / c1)
-                g21 = np.mean(A[ii, Ij] / c2)
+                g12 = np.mean(A[ii][Ij] / c1)
+                g21 = np.mean(A[ii][Ij] / c2)
 
                 omega21 = np.mean(c1 / c2)
                 omega12 = np.mean(c2 / c1)
@@ -168,15 +170,38 @@ def ajd_pham(X, eps=1e-6, n_iter_max=15):
                 tmp = np.real(tmp + np.sqrt(tmp ** 2 - h12 * h21))
                 tau = np.array([[1, -h12 / tmp], [-h21 / tmp, 1]])
 
-                A[[ii, jj], :] = np.dot(tau, A[[ii, jj], :])
-                tmp = np.c_[A[:, Ii], A[:, Ij]]
-                tmp = np.reshape(tmp, (n_times * n_epochs, 2), order='F')
-                tmp = np.dot(tmp, tau.T)
+                Aiijj = np.vstack((A[ii], A[jj]))
+                Aiijj = np.dot(tau, Aiijj)
+                A[ii] = Aiijj[0]
+                A[jj] = Aiijj[1]
 
-                tmp = np.reshape(tmp, (n_times, n_epochs * 2), order='F')
+                AIi = A[:, Ii]
+                AIj = A[:, Ij]
+                n1, n2 = AIi.shape
+                tmp = np.zeros((n_times * n_epochs, 2))
+
+
+                for i in prange(n2):
+                    for j in prange(n1):
+                        tmp[i*n1+j][0] = AIi[j][i]
+                        tmp[i*n1+j][1] = AIj[j][i]
+
+                tmp1, tmp2 = np.dot(tmp, tau.T).T
+                tmp = np.zeros((n_times, n_epochs * 2))
+
+                for i in prange(n_epochs):
+                    for j in prange(n_times):
+                        tmp[j][i] = tmp1[i*n_times+j]
+                        tmp[j][i+n_epochs] = tmp2[i*n_times+j]
+
                 A[:, Ii] = tmp[:, :n_epochs]
                 A[:, Ij] = tmp[:, n_epochs:]
-                V[[ii, jj], :] = np.dot(tau, V[[ii, jj], :])
+
+                Viijj = np.vstack((V[ii], V[jj]))
+                Viijj = np.dot(tau, Viijj)
+                V[ii] = Viijj[0]
+                V[jj] = Viijj[1]
+
         if decr < epsilon:
             break
     D = np.reshape(A, (n_times, -1, n_times)).transpose(1, 0, 2)
@@ -282,3 +307,16 @@ def uwedge(X, init=None, eps=1e-7, n_iter_max=100):
 
     D = np.reshape(Ms, (d, L, d)).transpose(1, 0, 2)
     return W_est, D
+
+
+@njit(parallel=True)
+def _concatenate(X):
+    """
+    Helper function for numba, same as np.concatenate(X, axis=0)
+    """
+    Nt, Ne, Ne = X.shape
+    Xconc = np.zeros((Nt * Ne, Ne))
+    for i in prange(Nt):
+        for j in prange(Ne):
+            Xconc[i * Ne + j] = X[i][j]
+    return Xconc

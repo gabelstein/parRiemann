@@ -243,6 +243,7 @@ def mean_euclid(covmats, sample_weight=None):
     return mean
 
 
+
 def mean_ale(covmats, tol=10e-7, maxiter=50, sample_weight=None):
     """Return the mean covariance matrix according using the AJD-based
     log-Euclidean Mean (ALE). See [1].
@@ -296,6 +297,7 @@ def mean_ale(covmats, tol=10e-7, maxiter=50, sample_weight=None):
     return C
 
 
+@njit
 def mean_identity(covmats, sample_weight=None):
     """Return the identity matrix corresponding to the covmats sit size
 
