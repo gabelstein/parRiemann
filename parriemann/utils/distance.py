@@ -1,8 +1,7 @@
 """Distance utils."""
 import numpy
-from scipy.linalg import eigvalsh
-
-from .base import logm, sqrtm
+from numba import njit
+from .base import logm, sqrtm, invsqrtm
 
 
 def distance_kullback(A, B):
@@ -60,6 +59,7 @@ def distance_logeuclid(A, B):
     return distance_euclid(logm(A), logm(B))
 
 
+@njit
 def distance_riemann(A, B):
     """Riemannian distance between two covariance matrices A and B.
 
@@ -73,7 +73,12 @@ def distance_riemann(A, B):
     :returns: Riemannian distance between A and B
 
     """
-    return numpy.sqrt((numpy.log(eigvalsh(A, B))**2).sum())
+    Bm12 = invsqrtm(B)
+    tmp = numpy.dot(Bm12, A)
+    eigvals = numpy.linalg.eigvalsh(numpy.dot(tmp, Bm12))
+    log = numpy.log(eigvals) ** 2
+    sqrtsum = numpy.sqrt((log).sum())
+    return sqrtsum
 
 
 def distance_logdet(A, B):
