@@ -71,6 +71,7 @@ def geodesic_euclid(A, B, alpha=0.5):
     """
     return (1 - alpha) * A + alpha * B
 
+
 @njit
 def geodesic_logeuclid(A, B, alpha=0.5):
     """Return the matrix at the position alpha on the log euclidean geodesic between A and B  :
