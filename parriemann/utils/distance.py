@@ -1,9 +1,10 @@
 """Distance utils."""
 import numpy
-from numba import njit
+from numba import njit, typed, types, typeof
 from .base import logm, sqrtm, invsqrtm
 
 
+@njit
 def distance_kullback(A, B):
     """Kullback leibler divergence between two covariance matrices A and B.
 
@@ -18,16 +19,19 @@ def distance_kullback(A, B):
     return 0.5 * kl
 
 
+@njit
 def distance_kullback_right(A, B):
     """wrapper for right kullblack leibler div."""
     return distance_kullback(B, A)
 
 
+@njit
 def distance_kullback_sym(A, B):
     """Symetrized kullback leibler divergence."""
     return distance_kullback(A, B) + distance_kullback_right(A, B)
 
 
+@njit
 def distance_euclid(A, B):
     """Euclidean distance between two covariance matrices A and B.
 
@@ -42,9 +46,10 @@ def distance_euclid(A, B):
     :returns: Eclidean distance between A and B
 
     """
-    return numpy.linalg.norm(A - B, ord='fro')
+    return numpy.linalg.norm(A - B)
 
 
+@njit
 def distance_logeuclid(A, B):
     """Log Euclidean distance between two covariance matrices A and B.
 
@@ -81,6 +86,7 @@ def distance_riemann(A, B):
     return sqrtsum
 
 
+@njit
 def distance_logdet(A, B):
     """Log-det distance between two covariance matrices A and B.
 
@@ -97,6 +103,7 @@ def distance_logdet(A, B):
         numpy.log(numpy.linalg.det(A)*numpy.linalg.det(B)))
 
 
+@njit
 def distance_wasserstein(A, B):
     """Wasserstein distance between two covariances matrices.
 
@@ -124,19 +131,85 @@ def distance(A, B, metric='riemann'):
     :returns: the distance between A and B
 
     """
-    if callable(metric):
-        distance_function = metric
-    else:
-        distance_function = distance_methods[metric]
+    if metric == 'riemann':
+        if A.ndim == 3:
+            d = numpy.empty((len(A), 1))
+            for i in range(len(A)):
+                d[i] = distance_riemann(A[i], B)
+            return d
+        else:
+            return distance_riemann(A, B)
 
-    if len(A.shape) == 3:
-        d = numpy.empty((len(A), 1))
-        for i in range(len(A)):
-            d[i] = distance_function(A[i], B)
-    else:
-        d = distance_function(A, B)
+    elif metric == 'logeuclid':
+        if A.ndim == 3:
+            d = numpy.empty((len(A), 1))
+            for i in range(len(A)):
+                d[i] = distance_logeuclid(A[i], B)
+            return d
+        else:
+            return distance_logeuclid(A, B)
 
-    return d
+    elif metric == 'euclid':
+        if A.ndim == 3:
+            d = numpy.empty((len(A), 1))
+            for i in range(len(A)):
+                d[i] = distance_euclid(A[i], B)
+            return d
+        else:
+            return distance_euclid(A, B)
+
+    elif metric == 'logdet':
+        if A.ndim == 3:
+            d = numpy.empty((len(A), 1))
+            for i in range(len(A)):
+                d[i] = distance_logdet(A[i], B)
+            return d
+        else:
+            return distance_logdet(A, B)
+
+    elif metric == 'kullback':
+        if A.ndim == 3:
+            d = numpy.empty((len(A), 1))
+            for i in range(len(A)):
+                d[i] = distance_kullback(A[i], B)
+            return d
+        else:
+            return distance_kullback(A, B)
+
+    elif metric == 'kullback_right':
+        if A.ndim == 3:
+            d = numpy.empty((len(A), 1))
+            for i in range(len(A)):
+                d[i] = distance_kullback_right(A[i], B)
+            return d
+        else:
+            return distance_kullback_right(A, B)
+
+    elif metric == 'kullback_sym':
+        if A.ndim == 3:
+            d = numpy.empty((len(A), 1))
+            for i in range(len(A)):
+                d[i] = distance_kullback_sym(A[i], B)
+            return d
+        else:
+            return distance_kullback_sym(A, B)
+
+    elif metric == 'wasserstein':
+        if A.ndim == 3:
+            d = numpy.empty((len(A), 1))
+            for i in range(len(A)):
+                d[i] = distance_wasserstein(A[i], B)
+            return d
+        else:
+            return distance_wasserstein(A, B)
+    else:
+        if A.ndim == 3:
+            d = numpy.empty((len(A), 1))
+            for i in range(len(A)):
+                d[i] = metric(A[i], B)
+            return d
+        else:
+            return metric(A, B)
 
 
 def pairwise_distance(X, Y=None, metric='riemann'):
@@ -176,7 +249,6 @@ distance_methods = {'riemann': distance_riemann,
                     'kullback_right': distance_kullback_right,
                     'kullback_sym': distance_kullback_sym,
                     'wasserstein': distance_wasserstein}
-
 
 def _check_distance_method(method):
     """checks methods """
