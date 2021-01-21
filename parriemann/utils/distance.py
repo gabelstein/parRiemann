@@ -1,9 +1,10 @@
 """Distance utils."""
 import numpy
-from numba import njit
+from numba import njit, prange
 from .base import logm, sqrtm, invsqrtm
 
 
+@njit
 def distance_kullback(A, B):
     """Kullback leibler divergence between two covariance matrices A and B.
 
@@ -18,16 +19,19 @@ def distance_kullback(A, B):
     return 0.5 * kl
 
 
+@njit
 def distance_kullback_right(A, B):
     """wrapper for right kullblack leibler div."""
     return distance_kullback(B, A)
 
 
+@njit
 def distance_kullback_sym(A, B):
     """Symetrized kullback leibler divergence."""
     return distance_kullback(A, B) + distance_kullback_right(A, B)
 
 
+@njit
 def distance_euclid(A, B):
     """Euclidean distance between two covariance matrices A and B.
 
@@ -42,9 +46,10 @@ def distance_euclid(A, B):
     :returns: Eclidean distance between A and B
 
     """
-    return numpy.linalg.norm(A - B, ord='fro')
+    return numpy.linalg.norm(A - B)
 
 
+@njit
 def distance_logeuclid(A, B):
     """Log Euclidean distance between two covariance matrices A and B.
 
@@ -81,6 +86,7 @@ def distance_riemann(A, B):
     return sqrtsum
 
 
+@njit
 def distance_logdet(A, B):
     """Log-det distance between two covariance matrices A and B.
 
@@ -97,6 +103,7 @@ def distance_logdet(A, B):
         numpy.log(numpy.linalg.det(A)*numpy.linalg.det(B)))
 
 
+@njit
 def distance_wasserstein(A, B):
     """Wasserstein distance between two covariances matrices.
 
@@ -113,6 +120,7 @@ def distance_wasserstein(A, B):
     return numpy.sqrt(numpy.trace(A + B - 2*C))
 
 
+@njit
 def distance(A, B, metric='riemann'):
     """Distance between two covariance matrices A and B according to the metric.
 
@@ -124,21 +132,58 @@ def distance(A, B, metric='riemann'):
     :returns: the distance between A and B
 
     """
-    if callable(metric):
-        distance_function = metric
+    if metric == 'riemann':
+        if A.ndim == 3:
+            return _par_distance_helper(distance_riemann, A, B)
+        else:
+            return distance_riemann(A, B)
+
+    elif metric == 'logeuclid':
+        if A.ndim == 3:
+            return _par_distance_helper(distance_logeuclid, A, B)
+        else:
+            return distance_logeuclid(A, B)
+
+    elif metric == 'euclid':
+        if A.ndim == 3:
+            return _par_distance_helper(distance_euclid, A, B)
+        else:
+            return distance_euclid(A, B)
+
+    elif metric == 'logdet':
+        if A.ndim == 3:
+            return _par_distance_helper(distance_logdet, A, B)
+        else:
+            return distance_logdet(A, B)
+
+    elif metric == 'kullback':
+        if A.ndim == 3:
+            return _par_distance_helper(distance_kullback, A, B)
+        else:
+            return distance_kullback(A, B)
+
+    elif metric == 'kullback_right':
+        if A.ndim == 3:
+            return _par_distance_helper(distance_kullback_right, A, B)
+        else:
+            return distance_kullback_right(A, B)
+
+    elif metric == 'kullback_sym':
+        if A.ndim == 3:
+            return _par_distance_helper(distance_kullback_sym, A, B)
+        else:
+            return distance_kullback_sym(A, B)
+
+    elif metric == 'wasserstein':
+        if A.ndim == 3:
+            return _par_distance_helper(distance_wasserstein, A, B)
+        else:
+            return distance_wasserstein(A, B)
     else:
-        distance_function = distance_methods[metric]
-
-    if len(A.shape) == 3:
-        d = numpy.empty((len(A), 1))
-        for i in range(len(A)):
-            d[i] = distance_function(A[i], B)
-    else:
-        d = distance_function(A, B)
-
-    return d
+        raise NotImplementedError('Metric not implemented. Callable metrics not supported.')
 
 
+@njit(parallel=True)
 def pairwise_distance(X, Y=None, metric='riemann'):
     """Pairwise distance matrix
 
@@ -155,16 +200,17 @@ def pairwise_distance(X, Y=None, metric='riemann'):
 
     if Y is None:
         dist = numpy.zeros((Ntx, Ntx))
-        for i in range(Ntx):
-            for j in range(i + 1, Ntx):
-                dist[i, j] = distance(X[i], X[j], metric)
-        dist += dist.T
+        for i in prange(Ntx):
+            for j in prange(i + 1, Ntx):
+                dist[i][j] = distance(X[i], X[j], metric)
+        dist = dist + dist.T
+
     else:
         Nty, _, _ = Y.shape
         dist = numpy.empty((Ntx, Nty))
-        for i in range(Ntx):
-            for j in range(Nty):
-                dist[i, j] = distance(X[i], Y[j], metric)
+        for i in prange(Ntx):
+            for j in prange(Nty):
+                dist[i][j] = distance(X[i], Y[j], metric)
     return dist
 
 
@@ -188,3 +234,11 @@ def _check_distance_method(method):
     elif not hasattr(method, '__call__'):
         raise ValueError('distance method must be a function or a string.')
     return method
+
+
+@njit(parallel=True)
+def _par_distance_helper(dist, A, B):
+    d = numpy.empty((len(A), 1))
+    for i in prange(len(A)):
+        d[i] = dist(A[i], B)
+    return d

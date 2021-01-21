@@ -15,7 +15,6 @@ from .tangentspace import FGDA, TangentSpace
 
 
 class MDM(BaseEstimator, ClassifierMixin, TransformerMixin):
-
     """Classification by Minimum Distance to Mean.
 
     Classification by nearest centroid. For each of the given classes, a
@@ -112,8 +111,8 @@ class MDM(BaseEstimator, ClassifierMixin, TransformerMixin):
 
         if self.n_jobs == 1:
             self.covmeans_ = [mean_covariance(X[y == l], metric=self.metric_mean,
-                                    sample_weight=sample_weight[y == l])
-                                        for l in self.classes_]
+                                              sample_weight=sample_weight[y == l])
+                              for l in self.classes_]
             """
             for l in self.classes_:
                 self.covmeans_.append(
@@ -131,14 +130,8 @@ class MDM(BaseEstimator, ClassifierMixin, TransformerMixin):
     def _predict_distances(self, covtest):
         """Helper to predict the distance. equivalent to transform."""
         Nc = len(self.covmeans_)
-
-        if self.n_jobs == 1:
-            dist = [distance(covtest, self.covmeans_[m], self.metric_dist)
-                    for m in range(Nc)]
-        else:
-            dist = Parallel(n_jobs=self.n_jobs)(delayed(distance)(
-                covtest, self.covmeans_[m], self.metric_dist)
-                for m in range(Nc))
+        # n_jobs deprecated, produces errors with numba
+        dist = [distance(covtest, self.covmeans_[m], self.metric_dist) for m in range(Nc)]
 
         dist = numpy.concatenate(dist, axis=1)
         return dist
@@ -196,7 +189,6 @@ class MDM(BaseEstimator, ClassifierMixin, TransformerMixin):
 
 
 class FgMDM(BaseEstimator, ClassifierMixin, TransformerMixin):
-
     """Classification by Minimum Distance to Mean with geodesic filtering.
 
     Apply geodesic filtering described in [1], and classify using MDM algorithm
@@ -302,7 +294,7 @@ class FgMDM(BaseEstimator, ClassifierMixin, TransformerMixin):
         """
         cov = self._fgda.transform(X)
         return self._mdm.predict(cov)
-    
+
     def predict_proba(self, X):
         """Predict proba using softmax after FGDA filtering.
 
@@ -318,7 +310,7 @@ class FgMDM(BaseEstimator, ClassifierMixin, TransformerMixin):
         """
         cov = self._fgda.transform(X)
         return self._mdm.predict_proba(cov)
-    
+
     def transform(self, X):
         """get the distance to each centroid after FGDA filtering.
 
@@ -337,7 +329,6 @@ class FgMDM(BaseEstimator, ClassifierMixin, TransformerMixin):
 
 
 class TSclassifier(BaseEstimator, ClassifierMixin):
-
     """Classification in the tangent space.
 
     Project data in the tangent space and apply a classifier on the projected
@@ -381,7 +372,6 @@ class TSclassifier(BaseEstimator, ClassifierMixin):
         if not isinstance(clf, ClassifierMixin):
             raise TypeError('clf must be a ClassifierMixin')
 
-            
     def fit(self, X, y):
         """Fit TSclassifier.
 
@@ -434,7 +424,6 @@ class TSclassifier(BaseEstimator, ClassifierMixin):
 
 
 class KNearestNeighbor(MDM):
-
     """Classification by K-NearestNeighbor.
 
     Classification by nearest Neighbors. For each point of the test set, the
