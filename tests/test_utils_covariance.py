@@ -2,9 +2,9 @@ from numpy.testing import assert_array_almost_equal, assert_array_equal
 from nose.tools import assert_equal, assert_raises
 import numpy as np
 from scipy.signal import coherence as coh_sp
-
 from parriemann.utils.covariance import (covariances, covariances_EP, eegtocov,
                                          cospectrum, coherence)
+from pyriemann.utils.covariance import covariances as cov2
 
 
 def test_covariances():
@@ -12,10 +12,13 @@ def test_covariances():
     x = np.random.randn(2, 3, 100)
     cov = covariances(x)
     cov = covariances(x, estimator='oas')
+    assert_array_almost_equal(cov, cov2(x, estimator='oas'))
     cov = covariances(x, estimator='lwf')
+    assert_array_almost_equal(cov, cov2(x, estimator='lwf'))
     cov = covariances(x, estimator='scm')
+    assert_array_almost_equal(cov, cov2(x, estimator='scm'))
     cov = covariances(x, estimator='corr')
-    cov = covariances(x, estimator='mcd')
+    assert_array_almost_equal(cov, cov2(x, estimator='corr'))
     cov = covariances(x, estimator=np.cov)
     assert_raises(ValueError, covariances, x, estimator='truc')
 
@@ -29,7 +32,6 @@ def test_covariances_EP():
     cov = covariances_EP(x, p, estimator='lwf')
     cov = covariances_EP(x, p, estimator='scm')
     cov = covariances_EP(x, p, estimator='corr')
-    cov = covariances_EP(x, p, estimator='mcd')
 
 
 def test_covariances_eegtocov():

@@ -237,11 +237,20 @@ def mean_euclid(covmats, sample_weight=None):
 
     """
     sample_weight = _get_sample_weight(sample_weight, covmats)
-    Nt, Ne, Ne = covmats.shape
-    mean = numpy.zeros((Ne, Ne))
-    for index in prange(Nt):
-        mean += covmats[index] * sample_weight[index]
-    return mean
+    if covmats.ndim == 3:
+        Nt, Ne, Ne = covmats.shape
+        mean = numpy.zeros((Ne, Ne))
+        for index in prange(Nt):
+            mean += covmats[index] * sample_weight[index]
+        return mean
+    elif covmats.ndim == 2:
+        Nt, Ne = covmats.shape
+        mean = numpy.zeros((Ne))
+        for index in prange(Nt):
+            mean += covmats[index] * sample_weight[index]
+        return mean
+    else:
+        return ValueError("Cannot calculate mean.")
 
 
 @njit(parallel=True)
