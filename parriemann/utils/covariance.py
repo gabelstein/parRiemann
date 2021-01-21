@@ -1,22 +1,26 @@
 import numpy
-from numba import njit
+from numba import njit, prange
 from .mean import mean_euclid
+
 
 # Mapping different estimator on the sklearn toolbox
 
 
+@njit
 def _lwf(X):
     """Wrapper for sklearn ledoit wolf covariance estimator"""
     C, _ = ledoit_wolf(X.T)
     return C
 
 
+@njit
 def _oas(X):
     """Wrapper for sklearn oas covariance estimator"""
     C, _ = oas(X.T)
     return C
 
 
+@njit
 def _scm(X):
     """Wrapper for sklearn sample covariance estimator"""
     return empirical_covariance(X.T)
@@ -48,13 +52,29 @@ def _check_est(est):
     return est
 
 
+@njit
 def covariances(X, estimator='cov'):
     """Estimation of covariance matrix."""
-    est = _check_est(estimator)
+    if estimator == 'cov':
+        return _cov_loop(X, numpy.cov)
+    elif estimator == 'scm':
+        return _cov_loop(X, _scm)
+    elif estimator == 'lwf':
+        return _cov_loop(X, _lwf)
+    elif estimator == 'oas':
+        return _cov_loop(X, _oas)
+    elif estimator == 'corr':
+        return _cov_loop(X, numpy.corrcoef)
+    else:
+        raise ValueError("Not a valid estimator.")
+
+
+@njit(parallel=True)
+def _cov_loop(X, est):
     Nt, Ne, Ns = X.shape
     covmats = numpy.zeros((Nt, Ne, Ne))
-    for i in range(Nt):
-        covmats[i, :, :] = est(X[i, :, :])
+    for i in prange(Nt):
+        covmats[i] = est(X[i])
     return covmats
 
 
@@ -65,7 +85,7 @@ def covariances_EP(X, P, estimator='cov'):
     Np, Ns = P.shape
     covmats = numpy.zeros((Nt, Ne + Np, Ne + Np))
     for i in range(Nt):
-        covmats[i, :, :] = est(numpy.concatenate((P, X[i, :, :]), axis=0))
+        covmats[i] = est(numpy.concatenate((P, X[i]), axis=0))
     return covmats
 
 
@@ -112,7 +132,6 @@ def cospectrum(X, window=128, overlap=0.75, fmin=None, fmax=None, fs=None):
 
     # Loop on all frequencies
     for window_ix in range(int(number_windows)):
-
         # time markers to select the data
         # marker of the beginning of the time window
         t1 = int(window_ix * step)
@@ -134,12 +153,12 @@ def cospectrum(X, window=128, overlap=0.75, fmin=None, fmax=None, fs=None):
     # fdata = fdata.real
     Nf = fdata.shape[2]
     S = numpy.zeros((Ne, Ne, Nf), dtype=complex)
-    normval = numpy.linalg.norm(win)**2
+    normval = numpy.linalg.norm(win) ** 2
     for i in range(Nf):
         S[:, :, i] = numpy.dot(fdata[:, :, i].conj().T, fdata[:, :, i]) / (
-            number_windows * normval)
+                number_windows * normval)
 
-    return numpy.abs(S)**2
+    return numpy.abs(S) ** 2
 
 
 @njit
@@ -170,8 +189,7 @@ def empirical_covariance(X, assume_centered=False):
         X = numpy.reshape(X, (1, -1))
 
     if X.shape[0] == 1:
-        raise ValueError("Only one sample available. "
-                      "You may want to reshape your data array")
+        raise ValueError("Only one sample available. You may want to reshape your data array")
 
     if assume_centered:
         covariance = numpy.dot(X.T, X) / X.shape[0]
@@ -223,11 +241,10 @@ def oas(X, assume_centered=False):
     if len(X.shape) == 2 and X.shape[1] == 1:
         if not assume_centered:
             X = X - X.mean()
-        return numpy.array((X ** 2).mean()).reshape((1,1)), 0.
+        return numpy.array((X ** 2).mean()).reshape((1, 1)), 0.
     if X.ndim == 1:
         X = numpy.reshape(X, (1, -1))
-        raise ValueError("Only one sample available. "
-                      "You may want to reshape your data array")
+        raise ValueError("Only one sample available. You may want to reshape your data array")
         n_samples = 1
         n_features = X.size
     else:
@@ -244,7 +261,7 @@ def oas(X, assume_centered=False):
     shrinkage = 1. if den == 0 else min(num / den, 1.)
     shrunk_cov = (1. - shrinkage) * emp_cov
 
-    add_shrink_mu = numpy.zeros((n_features**2))
+    add_shrink_mu = numpy.zeros((n_features ** 2))
     add_shrink_mu[::n_features + 1] += shrinkage * mu
     add_shrink_mu = add_shrink_mu.reshape((n_features, n_features))
     shrunk_cov += add_shrink_mu
@@ -295,11 +312,10 @@ def ledoit_wolf(X, assume_centered=False, block_size=1000):
     if len(X.shape) == 2 and X.shape[1] == 1:
         if not assume_centered:
             X = X - X.mean()
-        return numpy.array((X ** 2).mean()).reshape((1,1)), 0.
+        return numpy.array((X ** 2).mean()).reshape((1, 1)), 0.
     if X.ndim == 1:
         X = numpy.reshape(X, (1, -1))
-        raise ValueError("Only one sample available. "
-                      "You may want to reshape your data array")
+        raise ValueError("Only one sample available. You may want to reshape your data array")
         n_features = X.size
     else:
         _, n_features = X.shape
@@ -362,8 +378,7 @@ def ledoit_wolf_shrinkage(X, assume_centered=False, block_size=1000):
         X = numpy.reshape(X, (1, -1))
 
     if X.shape[0] == 1:
-        raise ValueError("Only one sample available. "
-                      "You may want to reshape your data array")
+        raise ValueError("Only one sample available. You may want to reshape your data array")
     n_samples, n_features = X.shape
 
     # optionally center data
@@ -397,10 +412,10 @@ def ledoit_wolf_shrinkage(X, assume_centered=False, block_size=1000):
         delta_ += numpy.sum(
             numpy.dot(X.T[block_size * n_splits:], X[:, cols]) ** 2)
     delta_ += numpy.sum(numpy.dot(X.T[block_size * n_splits:],
-                            X[:, block_size * n_splits:]) ** 2)
+                                  X[:, block_size * n_splits:]) ** 2)
     delta_ /= n_samples ** 2
     beta_ += numpy.sum(numpy.dot(X2.T[block_size * n_splits:],
-                           X2[:, block_size * n_splits:]))
+                                 X2[:, block_size * n_splits:]))
     # use delta_ to compute beta
     beta = 1. / (n_features * n_samples) * (beta_ / n_samples - delta_)
     # delta is the sum of the squared coefficients of (<X.T,X> - mu*Id) / p
