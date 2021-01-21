@@ -1,6 +1,6 @@
 """Distance utils."""
 import numpy
-from numba import njit, prange, typeof, types
+from numba import njit, prange
 from .base import logm, sqrtm, invsqrtm
 
 
@@ -179,9 +179,11 @@ def distance(A, B, metric='riemann'):
             return _par_distance_helper(distance_wasserstein, A, B)
         else:
             return distance_wasserstein(A, B)
+    else:
+        raise NotImplementedError('Metric not implemented. Callable metrics not supported.')
 
 
-@njit
+@njit(parallel=True)
 def pairwise_distance(X, Y=None, metric='riemann'):
     """Pairwise distance matrix
 
@@ -201,7 +203,8 @@ def pairwise_distance(X, Y=None, metric='riemann'):
         for i in prange(Ntx):
             for j in prange(i + 1, Ntx):
                 dist[i][j] = distance(X[i], X[j], metric)
-        dist += dist.T
+        dist = dist + dist.T
+
     else:
         Nty, _, _ = Y.shape
         dist = numpy.empty((Ntx, Nty))
