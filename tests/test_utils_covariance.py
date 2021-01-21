@@ -19,7 +19,6 @@ def test_covariances():
     assert_array_almost_equal(cov, cov2(x, estimator='scm'))
     cov = covariances(x, estimator='corr')
     assert_array_almost_equal(cov, cov2(x, estimator='corr'))
-    cov = covariances(x, estimator=np.cov)
     assert_raises(ValueError, covariances, x, estimator='truc')
 
 

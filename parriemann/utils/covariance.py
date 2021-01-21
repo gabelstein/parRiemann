@@ -1,22 +1,26 @@
 import numpy
-from numba import njit
+from numba import njit, generated_jit, prange
 from .mean import mean_euclid
+from pyriemann.utils.covariance import _check_est
 
 # Mapping different estimator on the sklearn toolbox
 
 
+@njit
 def _lwf(X):
     """Wrapper for sklearn ledoit wolf covariance estimator"""
     C, _ = ledoit_wolf(X.T)
     return C
 
 
+@njit
 def _oas(X):
     """Wrapper for sklearn oas covariance estimator"""
     C, _ = oas(X.T)
     return C
 
 
+@njit
 def _scm(X):
     """Wrapper for sklearn sample covariance estimator"""
     return empirical_covariance(X.T)
@@ -48,14 +52,26 @@ def _check_est(est):
     return est
 
 
+@njit
 def covariances(X, estimator='cov'):
     """Estimation of covariance matrix."""
-    est = _check_est(estimator)
+    if estimator == 'cov': return _cov_loop(X, numpy.cov)
+    elif estimator == 'scm': return _cov_loop(X, _scm)
+    elif estimator == 'lwf': return _cov_loop(X, _lwf)
+    elif estimator == 'oas': return _cov_loop(X, _oas)
+    elif estimator == 'corr': return _cov_loop(X, numpy.corrcoef)
+    else:
+        raise ValueError("Not a valid estimator.")
+
+
+@njit(parallel=True)
+def _cov_loop(X, est):
     Nt, Ne, Ns = X.shape
     covmats = numpy.zeros((Nt, Ne, Ne))
-    for i in range(Nt):
-        covmats[i, :, :] = est(X[i, :, :])
+    for i in prange(Nt):
+        covmats[i] = est(X[i])
     return covmats
+
 
 
 def covariances_EP(X, P, estimator='cov'):
@@ -65,7 +81,7 @@ def covariances_EP(X, P, estimator='cov'):
     Np, Ns = P.shape
     covmats = numpy.zeros((Nt, Ne + Np, Ne + Np))
     for i in range(Nt):
-        covmats[i, :, :] = est(numpy.concatenate((P, X[i, :, :]), axis=0))
+        covmats[i] = est(numpy.concatenate((P, X[i]), axis=0))
     return covmats
 
 
