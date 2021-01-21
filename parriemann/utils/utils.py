@@ -1,3 +1,13 @@
+from numba import njit, prange
+import numpy as np
+
+
+def sliding_windows(data, step_size, shift):
+    return np.array([data[i * step_size:i * step_size + shift].T
+                     for i in range(data.shape[0] // step_size - shift // step_size + 1)])\
+        .reshape((-1, data.shape[1], shift))
+
+
 def check_version(library, min_version):
     """Check minimum library version required
 
