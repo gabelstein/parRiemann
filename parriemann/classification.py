@@ -109,21 +109,10 @@ class MDM(BaseEstimator, ClassifierMixin, TransformerMixin):
         if sample_weight is None:
             sample_weight = numpy.ones(X.shape[0])
 
-        if self.n_jobs == 1:
-            self.covmeans_ = [mean_covariance(X[y == l], metric=self.metric_mean,
-                                              sample_weight=sample_weight[y == l])
-                              for l in self.classes_]
-            """
-            for l in self.classes_:
-                self.covmeans_.append(
-                    mean_covariance(X[y == l], metric=self.metric_mean,
-                                    sample_weight=sample_weight[y == l]))
-            """
-        else:
-            self.covmeans_ = Parallel(n_jobs=self.n_jobs)(
-                delayed(mean_covariance)(X[y == l], metric=self.metric_mean,
-                                         sample_weight=sample_weight[y == l])
-                for l in self.classes_)
+        self.covmeans_ = [mean_covariance(X[y == l], metric=self.metric_mean,
+                                          sample_weight=sample_weight[y == l])
+                          for l in self.classes_]
+
 
         return self
 
