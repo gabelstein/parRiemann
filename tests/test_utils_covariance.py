@@ -5,6 +5,7 @@ from scipy.signal import coherence as coh_sp
 from parriemann.utils.covariance import (covariances, covariances_EP, eegtocov,
                                          cospectrum, coherence)
 from pyriemann.utils.covariance import covariances as cov2
+from pyriemann.utils.distance import distance_riemann
 
 
 def test_covariances():
@@ -12,13 +13,13 @@ def test_covariances():
     x = np.random.randn(2, 3, 100)
     cov = covariances(x)
     cov = covariances(x, estimator='oas')
-    assert_array_almost_equal(cov, cov2(x, estimator='oas'))
+    assert_array_almost_equal(cov, cov2(x, estimator='oas'), decimal=15)
     cov = covariances(x, estimator='lwf')
-    assert_array_almost_equal(cov, cov2(x, estimator='lwf'))
+    assert_array_almost_equal(cov, cov2(x, estimator='lwf'), decimal=15)
     cov = covariances(x, estimator='scm')
-    assert_array_almost_equal(cov, cov2(x, estimator='scm'))
+    assert_array_almost_equal(cov, cov2(x, estimator='scm'), decimal=15)
     cov = covariances(x, estimator='corr')
-    assert_array_almost_equal(cov, cov2(x, estimator='corr'))
+    assert_array_almost_equal(cov, cov2(x, estimator='corr'), decimal=15)
     assert_raises(ValueError, covariances, x, estimator='truc')
 
 
