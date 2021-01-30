@@ -7,10 +7,11 @@ from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin
 from sklearn.utils.extmath import softmax
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import make_pipeline
-from joblib import Parallel, delayed
+from sklearn.svm import SVC
 
 from .utils.mean import mean_covariance
 from .utils.distance import distance
+from .utils.utils import riemann_kernel_matrix
 from .tangentspace import FGDA, TangentSpace
 
 
@@ -490,3 +491,166 @@ class KNearestNeighbor(MDM):
         neighbors_classes = self.classes_[numpy.argsort(dist)]
         out, _ = stats.mode(neighbors_classes[:, 0:self.n_neighbors], axis=1)
         return out.ravel()
+
+
+class RSVC(BaseEstimator, ClassifierMixin):
+    """Classification by K-NearestNeighbor.
+
+    Classification by nearest Neighbors. For each point of the test set, the
+    pairwise distance to each element of the training set is estimated. The
+    class is affected according to the majority class of the k nearest
+    neighbors.
+
+    Parameters
+    ----------
+    n_neighbors : int, (default: 5)
+        Number of neighbors.
+    metric : string | dict (default: 'riemann')
+        The type of metric used for distance estimation.
+        see `distance` for the list of supported metric.
+    n_jobs : int, (default: 1)
+        The number of jobs to use for the computation. This works by computing
+        each of the distance to the training set in parallel.
+        If -1 all CPUs are used. If 1 is given, no parallel computing code is
+        used at all, which is useful for debugging. For n_jobs below -1,
+        (n_cpus + 1 + n_jobs) are used. Thus for n_jobs = -2, all CPUs but one
+        are used.
+
+    Attributes
+    ----------
+    classes_ : list
+        list of classes.
+
+    See Also
+    --------
+    Kmeans
+    MDM
+
+    """
+
+    def __init__(self, svc_func=SVC, C=1):
+        """Init."""
+        # store params for cloning purpose
+        self.svc_func = svc_func
+        self.C = C
+
+    def fit(self, X, y):
+        """Fit (store the training data).
+
+        Parameters
+        ----------
+        X : ndarray, shape (n_trials, n_channels, n_channels)
+            ndarray of SPD matrices.
+        y : ndarray shape (n_trials, 1)
+            labels corresponding to each trial.
+
+        Returns
+        -------
+        self : NearestNeighbor instance
+            The NearestNeighbor instance.
+        """
+        self.kernelmat = riemann_kernel_matrix(X, X)
+        self.train_data = X
+        self.svc = SVC(kernel='precomputed', C=self.C)
+        self.svc = self.svc.fit(self.kernelmat, y)
+
+        return self
+
+    def predict(self, X_test):
+        """get the predictions.
+
+        Parameters
+        ----------
+        X : ndarray, shape (n_trials, n_channels, n_channels)
+            ndarray of SPD matrices.
+
+        Returns
+        -------
+        pred : ndarray of int, shape (n_trials, 1)
+            the prediction for each trials according to the closest centroid.
+        """
+        test_kernel_mat = riemann_kernel_matrix(self.train_data, X_test)
+        return self.svc.predict(test_kernel_mat)
+
+
+class KNNRegression(MDM):
+    """Classification by K-NearestNeighbor.
+
+    Classification by nearest Neighbors. For each point of the test set, the
+    pairwise distance to each element of the training set is estimated. The
+    class is affected according to the majority class of the k nearest
+    neighbors.
+
+    Parameters
+    ----------
+    n_neighbors : int, (default: 5)
+        Number of neighbors.
+    metric : string | dict (default: 'riemann')
+        The type of metric used for distance estimation.
+        see `distance` for the list of supported metric.
+    n_jobs : int, (default: 1)
+        The number of jobs to use for the computation. This works by computing
+        each of the distance to the training set in parallel.
+        If -1 all CPUs are used. If 1 is given, no parallel computing code is
+        used at all, which is useful for debugging. For n_jobs below -1,
+        (n_cpus + 1 + n_jobs) are used. Thus for n_jobs = -2, all CPUs but one
+        are used.
+
+    Attributes
+    ----------
+    classes_ : list
+        list of classes.
+
+    See Also
+    --------
+    Kmeans
+    MDM
+
+    """
+
+    def __init__(self, n_neighbors=5, metric='riemann', n_jobs=1):
+        """Init."""
+        # store params for cloning purpose
+        self.n_neighbors = n_neighbors
+        MDM.__init__(self, metric=metric, n_jobs=n_jobs)
+
+    def fit(self, X, y):
+        """Fit (store the training data).
+
+        Parameters
+        ----------
+        X : ndarray, shape (n_trials, n_channels, n_channels)
+            ndarray of SPD matrices.
+        y : ndarray shape (n_trials, 1)
+            labels corresponding to each trial.
+
+        Returns
+        -------
+        self : NearestNeighbor instance
+            The NearestNeighbor instance.
+        """
+        self.classes_ = y
+        self.covmeans_ = X
+
+        return self
+
+    def predict(self, covtest):
+        """get the predictions.
+
+        Parameters
+        ----------
+        X : ndarray, shape (n_trials, n_channels, n_channels)
+            ndarray of SPD matrices.
+
+        Returns
+        -------
+        pred : ndarray of int, shape (n_trials, 1)
+            the prediction for each trials according to the closest centroid.
+        """
+        dist = self._predict_distances(covtest)
+        dist_sorted = numpy.sort(dist)
+        neighbors_classes = self.classes_[numpy.argsort(dist)]
+        softmax_dist = softmax(-dist_sorted[:, 0:self.n_neighbors])
+        knn_classes = neighbors_classes[:, 0:self.n_neighbors]
+        out = numpy.sum(knn_classes*softmax_dist, axis=1)
+        return out

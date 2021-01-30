@@ -2,7 +2,7 @@ import numpy as np
 from numpy.testing import assert_array_equal
 from nose.tools import assert_raises
 from parriemann.classification import (MDM, FgMDM, KNearestNeighbor,
-                                       TSclassifier)
+                                       TSclassifier, rSVC)
 
 
 def generate_cov(Nt, Ne):
@@ -108,3 +108,13 @@ def test_FgMDM_predict():
     fgmdm.fit(covset, labels)
     fgmdm.predict(covset)
     fgmdm.transform(covset)
+
+
+def test_rSVC():
+    """Test KNearestNeighbor"""
+    covset = np.concatenate((generate_cov(20, 8), np.array([np.eye(8) for i in range(20)])))
+    labels = np.array([0, 1]).repeat(20)
+    rsvc = rSVC()
+    rsvc.fit(covset, labels)
+    preds = rsvc.predict(covset)
+    assert_array_equal(labels, preds)
