@@ -503,28 +503,17 @@ class RSVC(BaseEstimator, ClassifierMixin):
 
     Parameters
     ----------
-    n_neighbors : int, (default: 5)
-        Number of neighbors.
-    metric : string | dict (default: 'riemann')
-        The type of metric used for distance estimation.
-        see `distance` for the list of supported metric.
-    n_jobs : int, (default: 1)
-        The number of jobs to use for the computation. This works by computing
-        each of the distance to the training set in parallel.
-        If -1 all CPUs are used. If 1 is given, no parallel computing code is
-        used at all, which is useful for debugging. For n_jobs below -1,
-        (n_cpus + 1 + n_jobs) are used. Thus for n_jobs = -2, all CPUs but one
-        are used.
+    svc_func : callable, (default: sklearn.svm.SVC)
+        function to perform the svc calculations.
+    C : float (default: 1.0)
+        C parameter for the C-SVM.
 
     Attributes
     ----------
-    classes_ : list
-        list of classes.
-
-    See Also
-    --------
-    Kmeans
-    MDM
+    svc_func : callable
+        svc function
+    C : float
+        C parameter.
 
     """
 
@@ -549,10 +538,10 @@ class RSVC(BaseEstimator, ClassifierMixin):
         self : NearestNeighbor instance
             The NearestNeighbor instance.
         """
-        self.kernelmat = riemann_kernel_matrix(X, X)
+        kernelmat = riemann_kernel_matrix(X, X)
         self.train_data = X
-        self.svc = SVC(kernel='precomputed', C=self.C)
-        self.svc = self.svc.fit(self.kernelmat, y)
+        self.svc = self.svc_func(kernel='precomputed', C=self.C)
+        self.svc = self.svc.fit(kernelmat, y)
 
         return self
 
@@ -574,12 +563,12 @@ class RSVC(BaseEstimator, ClassifierMixin):
 
 
 class KNNRegression(MDM):
-    """Classification by K-NearestNeighbor.
+    """Regression by K-NearestNeighbor.
 
-    Classification by nearest Neighbors. For each point of the test set, the
+    Reression by nearest Neighbors. For each point of the test set, the
     pairwise distance to each element of the training set is estimated. The
-    class is affected according to the majority class of the k nearest
-    neighbors.
+    class is affected according to the softmax average w.r.t. distance of
+    the k nearest neighbors.
 
     Parameters
     ----------
@@ -588,13 +577,6 @@ class KNNRegression(MDM):
     metric : string | dict (default: 'riemann')
         The type of metric used for distance estimation.
         see `distance` for the list of supported metric.
-    n_jobs : int, (default: 1)
-        The number of jobs to use for the computation. This works by computing
-        each of the distance to the training set in parallel.
-        If -1 all CPUs are used. If 1 is given, no parallel computing code is
-        used at all, which is useful for debugging. For n_jobs below -1,
-        (n_cpus + 1 + n_jobs) are used. Thus for n_jobs = -2, all CPUs but one
-        are used.
 
     Attributes
     ----------
@@ -608,11 +590,11 @@ class KNNRegression(MDM):
 
     """
 
-    def __init__(self, n_neighbors=5, metric='riemann', n_jobs=1):
+    def __init__(self, n_neighbors=5, metric='riemann'):
         """Init."""
         # store params for cloning purpose
         self.n_neighbors = n_neighbors
-        MDM.__init__(self, metric=metric, n_jobs=n_jobs)
+        MDM.__init__(self, metric=metric)
 
     def fit(self, X, y):
         """Fit (store the training data).
