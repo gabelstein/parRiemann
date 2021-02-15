@@ -2,7 +2,7 @@ import numpy as np
 from numpy.testing import assert_array_equal
 from nose.tools import assert_raises
 from parriemann.classification import (MDM, FgMDM, KNearestNeighbor,
-                                       TSclassifier, RSVC)
+                                       TSclassifier, RSVC, KNNRegression)
 
 
 def generate_cov(Nt, Ne):
@@ -111,10 +111,20 @@ def test_FgMDM_predict():
 
 
 def test_RSVC():
-    """Test KNearestNeighbor"""
+    """Test RSVC"""
     covset = np.concatenate((generate_cov(20, 8), np.array([np.eye(8) for i in range(20)])))
     labels = np.array([0, 1]).repeat(20)
     rsvc = RSVC(C=100)
     rsvc.fit(covset, labels)
     preds = rsvc.predict(covset)
+    assert_array_equal(labels, preds)
+
+
+def test_KNNRegression():
+    """Test KNNRegression"""
+    covset = np.concatenate((generate_cov(20, 8), np.array([np.eye(8) for i in range(20)])))
+    labels = np.array([0., 1.]).repeat(20)
+    knnreg = KNNRegression(n_neighbors=2)
+    knnreg.fit(covset, labels)
+    preds = knnreg.predict(covset)
     assert_array_equal(labels, preds)
