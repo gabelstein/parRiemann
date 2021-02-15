@@ -201,9 +201,8 @@ def pairwise_distance(X, Y=None, metric='riemann'):
     if Y is None:
         dist = numpy.zeros((Ntx, Ntx))
         for i in prange(Ntx):
-            for j in prange(i + 1, Ntx):
+            for j in prange(Ntx):
                 dist[i][j] = distance(X[i], X[j], metric)
-        dist = dist + dist.T
 
     else:
         Nty, _, _ = Y.shape

@@ -4,6 +4,7 @@ import numpy as np
 from sklearn.base import BaseEstimator
 from sklearn.manifold import spectral_embedding
 from parriemann.utils.distance import pairwise_distance
+from numba import njit
 
 
 class Embedding(BaseEstimator):

@@ -185,9 +185,6 @@ def empirical_covariance(X, assume_centered=False):
     """
     X = numpy.asarray(X)
 
-    if X.ndim == 1:
-        X = numpy.reshape(X, (1, -1))
-
     if X.shape[0] == 1:
         raise ValueError("Only one sample available. You may want to reshape your data array")
 
