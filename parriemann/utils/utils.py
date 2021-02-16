@@ -1,102 +1,86 @@
+import mne as mne
+import scipy
 from numba import njit, prange
 import numpy as np
+from sklearn.base import TransformerMixin, ClassifierMixin, BaseEstimator
 
 
-def cv_split_by_labels(labels, cv):
-    all_idx = np.arange(len(labels))
-    idx_split, label_split = _split_data_by_class(all_idx, labels)
+class SlidingWindow(BaseEstimator, TransformerMixin):
+    def __init__(self, window_size, step_size, adjust_class_size=False):
+        self.window_size = window_size
+        self.step_size = step_size
+        self.adjust_class_size = adjust_class_size
 
-    classes = np.unique(labels)
-    idx = [[] for i in range(cv)]
+    def fit(self, X, y):
+        return self
 
-    for i in range(len(classes)):
-        tmp_idx = label_split==classes[i]
-        class_idx = idx_split[tmp_idx]
-        for tmp in class_idx:
-            idx[i % cv].append(tmp)
-    return idx
+    def transform(self, X, y=None):
+        X_, y_ = self._labeled_windows(X, y)
+        return X_, y_
 
+    def fit_transform(self, X, y):
+        X_, y_ = self._labeled_windows(X, y)
+        return X_, y_
 
-@njit
-def cv_idx(data):
-    cv = len(data)
-    fullidx = np.arange(np.sum(data))
-    train = list()
-    test = list()
-    start = 0
-    end = 0
-    for i in range(cv):
-        end += data[i]
-        test.append(fullidx[start:end])
-        train.append(np.delete(fullidx, fullidx[start:end]))
-        start += data[i]
-    return train, test
+    def _labeled_windows(self, data, label):
+        """
+        This function creates sliding windows for multivariate data.
+        ----------
+        data : ndarray
+            multivariate data to turn into sliding windows based on the labels provided.
+            Dimension: nSamples x nChannels
+        label : ndarray
+            labels for the data.
+        intlength : int,
+            lenght of the sliding windows. The default is 200.
+        step_size : int,
+            size of step until next sliding window is calculated. The default is 20. Only produces exact overlapping windows
+            if intlength is an integer multiple of step_size.
+        Returns
+        -------
+        X,y : ndarray, ndarray
+            data turned into sliding windows and corresponding label for each data point.
+            Dimension: nSamples x nChannels x intlength
+        """
+        if len(data) != len(label):
+            raise ValueError("Data and labels must have same length.")
+        Nt, Ne = data.shape
+        if self.adjust_class_size:
+            ratios = _adjust_classes(label)
 
+        datasplit, labelsplit = _split_data_by_class(data, label)
+        n_chunks = len(labelsplit)
+        X = list()
+        y = list()
 
-@njit
-def labeled_windows(data, label, window_size=200, shift=20, adjust_class_size=True):
-    """
-    This function creates sliding windows for multivariate data.
-    ----------
-    data : ndarray
-        multivariate data to turn into sliding windows based on the labels provided.
-        Dimension: nSamples x nChannels
-    label : ndarray
-        labels for the data.
-    intlength : int,
-        lenght of the sliding windows. The default is 200.
-    step_size : int,
-        size of step until next sliding window is calculated. The default is 20. Only produces exact overlapping windows
-        if intlength is an integer multiple of step_size.
+        for i in range(n_chunks):
+            if self.adjust_class_size:
+                step = int(self.step_size * ratios[labelsplit[i]])
+            else:
+                step = self.step_size
+            X.append(_sliding_windows(datasplit[i], self.window_size, step))
+            y.append(np.ones(X[i].shape[0]) * labelsplit[i])
 
-    Returns
-    -------
-    X,y : ndarray, ndarray
-        data turned into sliding windows and corresponding label for each data point.
-        Dimension: nSamples x nChannels x intlength
-    """
-    if len(data) != len(label):
-        raise ValueError("Data and labels must have same length.")
+        _sub_len = np.array([len(X[i]) for i in range(n_chunks)])
+        n_windows = np.sum(_sub_len)
+        X_ = np.zeros((n_windows, Ne, self.window_size))
+        y_ = np.zeros(n_windows)
+        start = 0
+        for i in range(n_chunks):
+            sub_len = _sub_len[i]
+            X_[start:start + sub_len] = X[i]
+            y_[start:start + sub_len] = y[i]
+            start += sub_len
 
-    Nt, Ne = data.shape
-    if adjust_class_size:
-        ratios = _adjust_classes(label)
-
-    datasplit, labelsplit = _split_data_by_class(data, label)
-    n_chunks = len(labelsplit)
-    X = list()
-    y = list()
-
-    for i in range(n_chunks):
-        if adjust_class_size:
-            step = int(shift*ratios[labelsplit[i]])
-        else:
-            step = shift
-        X.append(sliding_windows(datasplit[i], window_size, step))
-        y.append(np.ones(X[i].shape[0]) * labelsplit[i])
-
-    _sub_len = np.array([len(X[i]) for i in range(n_chunks)])
-    n_windows = np.sum(_sub_len)
-    X_ = np.zeros((n_windows, Ne, window_size))
-    y_ = np.zeros(n_windows)
-    start = 0
-    for i in range(n_chunks):
-        sub_len = _sub_len[i]
-        X_[start:start + sub_len] = X[i]
-        y_[start:start + sub_len] = y[i]
-        start += sub_len
-
-    #X = np.array([((x.T-x.mean(axis=1)).T/x.std(axis=1)[:,None]) for x in X])
-
-    return X_, y_
+        return X_, y_
 
 
 @njit(parallel=True)
-def sliding_windows(data, window_size, shift):
+def _sliding_windows(data, window_size, shift):
     Nt, Ne = data.shape
     Nw = (data.shape[0] - window_size) // shift + 1
     _dat = np.zeros((Nw, Ne, window_size))
-    for i in prange(Nw):
+    for i in range(Nw):
         _dat[i] = data[i * shift:i * shift + window_size].T
     return _dat
 
@@ -125,24 +109,21 @@ def _split_data_by_class(data, label):
     return datasplit, labelsplit
 
 
-@njit#throws errors if parallel=True \_('_')_/
+@njit
 def _array_split(ary, indices_or_sections):
     """
     Split an array into multiple sub-arrays.
-
     Please refer to the ``split`` documentation.  The only difference
     between these functions is that ``array_split`` allows
     `indices_or_sections` to be an integer that does *not* equally
     divide the axis. For an array of length l that should be split
     into n sections, it returns l % n sub-arrays of size l//n + 1
     and the rest of size l//n.
-
     See Also
     --------
     split : Split array into multiple sub-arrays of equal size.
-
     """
-    Ntotal = ary.shape[0]
+    Ntotal = len(ary)
 
     Nsections = len(indices_or_sections) + 1
     div_points = [0] + list(indices_or_sections) + [Ntotal]
@@ -154,6 +135,187 @@ def _array_split(ary, indices_or_sections):
         sub_arys.append(ary[st:end])
 
     return sub_arys
+
+
+@njit
+def cv_split_by_labels(labels, cv):
+    all_idx = np.arange(len(labels))
+    idx_split, label_split = _split_data_by_class(all_idx, labels)
+
+    classes = np.unique(labels)
+    idx = [[] for i in range(cv)]
+
+    for i in range(len(classes)):
+        tmp_idx = (label_split == classes[i])
+        print(tmp_idx)
+        class_idx = idx_split[tmp_idx]
+        for tmp in class_idx:
+            idx[i % cv].append(tmp)
+    return idx
+
+
+@njit
+def cv_idx(data):
+    cv = len(data)
+    fullidx = np.arange(np.sum(data))
+    train = list()
+    test = list()
+    start = 0
+    end = 0
+    for i in range(cv):
+        end += data[i]
+        test.append(fullidx[start:end])
+        train.append(np.delete(fullidx, fullidx[start:end]))
+        start += data[i]
+    return train, test
+
+
+class BandPassFilter(BaseEstimator, TransformerMixin):
+    """Band Pass filtering.
+
+    ----------
+    filter_bands : list
+        bands to filter signal with
+    sample_rate : int
+        Signal sample rate
+    filter_len : int,
+        lenght of the filter. The default is 1001.
+    l_trans_bandwidth : TYPE, optional
+        DESCRIPTION. The default is 4.
+    h_trans_bandwidth : TYPE, optional
+        DESCRIPTION. The default is 4.
+    """
+
+    def __init__(self, filter_bands, sample_rate, filter_len='1000ms', l_trans_bandwidth=4, h_trans_bandwidth=4):
+        self.filter_bands = filter_bands
+        self.sample_rate = sample_rate
+        self.filter_len = filter_len
+        self.l_trans_bandwidth = l_trans_bandwidth
+        self.h_trans_bandwidth = h_trans_bandwidth
+
+    def fit(self, X, y):
+        self.filters = self._calc_band_filters(self.filter_bands,
+                                               self.sample_rate,
+                                               self.filter_len,
+                                               self.l_trans_bandwidth,
+                                               self.h_trans_bandwidth)
+
+        return self
+
+    def transform(self, X, y=None):
+        X_ = self._apply_filter(X, self.filters)
+        return X_
+
+    def fit_transform(self, X, y):
+        self.filters = self._calc_band_filters(self.filter_bands,
+                                               self.sample_rate,
+                                               self.filter_len,
+                                               self.l_trans_bandwidth,
+                                               self.h_trans_bandwidth)
+        X_ = self._apply_filter(X, self.filters)
+        return X_
+
+    def _calc_band_filters(self, f_ranges, sample_rate, filter_len="1000ms", l_trans_bandwidth=4, h_trans_bandwidth=4):
+        """
+        This function returns for the given frequency band ranges filter coefficients with with length "filter_len"
+        Thus the filters can be sequentially used for band power estimation
+        Parameters
+        ----------
+        f_ranges : TYPE
+            DESCRIPTION.
+        sample_rate : float
+            sampling frequency.
+        filter_len : int,
+            lenght of the filter. The default is 1001.
+        l_trans_bandwidth : TYPE, optional
+            DESCRIPTION. The default is 4.
+        h_trans_bandwidth : TYPE, optional
+            DESCRIPTION. The default is 4.
+        Returns
+        -------
+        filter_fun : array
+            filter coefficients stored in rows.
+        """
+        filter_fun = []
+
+        for a, f_range in enumerate(f_ranges):
+            h = mne.filter.create_filter(None, sample_rate, l_freq=f_range[0], h_freq=f_range[1],
+                                         fir_design='firwin', l_trans_bandwidth=l_trans_bandwidth,
+                                         h_trans_bandwidth=h_trans_bandwidth, filter_length=filter_len, verbose=False)
+
+            filter_fun.append(h)
+
+        return np.array(filter_fun)
+
+    def _apply_filter(self, dat_, filter_fun):
+        """
+        For a given channel, apply previously calculated filters
+
+        Parameters
+        ----------
+        dat_ : array (ns,)
+            segment of data at a given channel and downsample index.
+        sample_rate : float
+            sampling frequency.
+        filter_fun : array
+            output of calc_band_filters.
+        line_noise : int|float
+            (in Hz) the line noise frequency.
+        seglengths : list
+            list of ints with the leght to which variance is calculated.
+            Used only if variance is set to True.
+        variance : bool,
+            If True, return the variance of the filtered signal, else
+            the filtered signal is returned.
+        Returns
+        -------
+        filtered : array
+            if variance is set to True: (nfb,) array with the resulted variance
+            at each frequency band, where nfb is the number of filter bands used to decompose the signal
+            if variance is set to False: (nfb, filter_len) array with the filtered signal
+            at each freq band, where nfb is the number of filter bands used to decompose the signal
+        """
+        filtered = []
+
+        for filt in range(filter_fun.shape[0]):
+            for ch in dat_.T:
+                filtered.append(scipy.signal.convolve(ch, filter_fun[filt, :], mode='same'))
+
+        return np.array(filtered).T
+
+
+class NotchFilter(BaseEstimator, TransformerMixin):
+    """Notch filtering.
+
+    ----------
+    sample_rate : int
+        Signal sample rate.
+    line_noise : int
+        Line noise
+    """
+
+    def __init__(self, line_noise, sample_rate):
+        self.sample_rate = sample_rate
+        self.line_noise = line_noise
+
+    def fit(self, X, y):
+        return self
+
+    def transform(self, X, y=None):
+        X_ = self._notch_filter(X)
+        return X_, y
+
+    def fit_transform(self, X, y):
+        X_ = self._notch_filter(X)
+        return X_, y
+
+    def _notch_filter(self, dat_):
+        dat_notch_filtered = mne.filter.notch_filter(x=dat_.T, Fs=self.sample_rate, trans_bandwidth=7,
+                                                     freqs=np.arange(self.line_noise, 4 * self.line_noise,
+                                                                     self.line_noise),
+                                                     fir_design='firwin', verbose=False, notch_widths=1,
+                                                     filter_length=dat_.shape[0] - 1)
+        return dat_notch_filtered.T
 
 
 def check_version(library, min_version):

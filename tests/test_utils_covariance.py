@@ -4,8 +4,8 @@ import numpy as np
 from scipy.signal import coherence as coh_sp
 from parriemann.utils.covariance import (covariances, covariances_EP, eegtocov,
                                          cospectrum, coherence)
-from pyriemann.utils.covariance import covariances as cov2
-from pyriemann.utils.distance import distance_riemann
+from parriemann.utils.covariance import covariances as cov2
+from parriemann.utils.distance import distance_riemann
 
 
 def test_covariances():
