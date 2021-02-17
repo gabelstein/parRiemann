@@ -3,10 +3,12 @@ import numpy
 from sklearn.base import (BaseEstimator, ClassifierMixin, TransformerMixin,
                           ClusterMixin)
 from sklearn.cluster._kmeans import KMeans
-_init_centroids = KMeans()._init_centroids
+
+_init_centroids = KMeans._init_centroids
 from joblib import Parallel, delayed
 
 from .classification import MDM
+
 
 #######################################################################
 
@@ -16,10 +18,10 @@ def _fit_single(X, y=None, n_clusters=2, init='random', random_state=None,
     """helper to fit a single run of centroid."""
     # init random state if provided
     mdm = MDM(metric=metric, n_jobs=n_jobs)
-    squared_nomrs = [numpy.linalg.norm(x, ord='fro')**2 for x in X]
-    mdm.covmeans_ = _init_centroids(X, n_clusters, init,
-                                    random_state=random_state,
-                                    x_squared_norms=squared_nomrs)
+    squared_nomrs = [numpy.linalg.norm(x, ord='fro') ** 2 for x in X]
+    mdm.covmeans_ = KMeans(n_clusters=n_clusters)._init_centroids(X, init=init,
+                                                                  random_state=random_state,
+                                                                  x_squared_norms=squared_nomrs)
     if y is not None:
         mdm.classes_ = numpy.unique(y)
     else:
@@ -41,7 +43,6 @@ def _fit_single(X, y=None, n_clusters=2, init='random', random_state=None,
 
 
 class Kmeans(BaseEstimator, ClassifierMixin, ClusterMixin, TransformerMixin):
-
     """Kmean clustering using Riemannian geometry.
 
     Find clusters that minimize the sum of squared distance to their centroid.
@@ -149,12 +150,12 @@ class Kmeans(BaseEstimator, ClassifierMixin, ClusterMixin, TransformerMixin):
                 res = []
                 for i in range(self.n_init):
                     res.append(_fit_single(X, y,
-                                      n_clusters=self.n_clusters,
-                                      init=self.init,
-                                      random_state=seeds[i],
-                                      metric=self.metric,
-                                      max_iter=self.max_iter,
-                                      tol=self.tol))
+                                           n_clusters=self.n_clusters,
+                                           init=self.init,
+                                           random_state=seeds[i],
+                                           metric=self.metric,
+                                           max_iter=self.max_iter,
+                                           tol=self.tol))
                 labels, inertia, mdm = zip(*res)
             else:
 
@@ -223,7 +224,6 @@ class Kmeans(BaseEstimator, ClassifierMixin, ClusterMixin, TransformerMixin):
 
 
 class KmeansPerClassTransform(BaseEstimator, TransformerMixin):
-
     """Run kmeans for each class."""
 
     def __init__(self, n_clusters=2, **params):
@@ -249,7 +249,6 @@ class KmeansPerClassTransform(BaseEstimator, TransformerMixin):
 
 
 class Potato(BaseEstimator, TransformerMixin, ClassifierMixin):
-
     """Artefact detection with the Riemannian Potato.
 
     The Riemannian Potato [1] is a clustering method used to detect artifact in
@@ -294,7 +293,7 @@ class Potato(BaseEstimator, TransformerMixin, ClassifierMixin):
         self.threshold = threshold
         self.n_iter_max = n_iter_max
         if pos_label == neg_label:
-            raise(ValueError("Positive and Negative labels must be different"))
+            raise (ValueError("Positive and Negative labels must be different"))
         self.pos_label = pos_label
         self.neg_label = neg_label
 

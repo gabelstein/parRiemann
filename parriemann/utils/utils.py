@@ -2,7 +2,7 @@ import mne as mne
 import scipy
 from numba import njit, prange
 import numpy as np
-from sklearn.base import TransformerMixin, ClassifierMixin, BaseEstimator
+from sklearn.base import TransformerMixin, BaseEstimator
 
 
 class SlidingWindow(BaseEstimator, TransformerMixin):
@@ -15,8 +15,10 @@ class SlidingWindow(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, X, y=None):
-        X_, y_ = self._labeled_windows(X, y)
-        return X_, y_
+        if y is None:
+            return _sliding_windows(X,self.window_size,self.step_size)
+        else:
+            return self._labeled_windows(X, y)
 
     def fit_transform(self, X, y):
         X_, y_ = self._labeled_windows(X, y)
@@ -137,7 +139,7 @@ def _array_split(ary, indices_or_sections):
     return sub_arys
 
 
-@njit
+#@njit
 def cv_split_by_labels(labels, cv):
     all_idx = np.arange(len(labels))
     idx_split, label_split = _split_data_by_class(all_idx, labels)
@@ -147,10 +149,13 @@ def cv_split_by_labels(labels, cv):
 
     for i in range(len(classes)):
         tmp_idx = (label_split == classes[i])
-        print(tmp_idx)
-        class_idx = idx_split[tmp_idx]
+        class_idx = []
+        for k in range(len(tmp_idx)):
+            if tmp_idx[k]:
+                class_idx.append(idx_split[k])
         for tmp in class_idx:
-            idx[i % cv].append(tmp)
+            res = i % cv
+            idx[res].append(tmp)
     return idx
 
 
@@ -303,11 +308,11 @@ class NotchFilter(BaseEstimator, TransformerMixin):
 
     def transform(self, X, y=None):
         X_ = self._notch_filter(X)
-        return X_, y
+        return X_
 
-    def fit_transform(self, X, y):
+    def fit_transform(self, X, y=None):
         X_ = self._notch_filter(X)
-        return X_, y
+        return X_
 
     def _notch_filter(self, dat_):
         dat_notch_filtered = mne.filter.notch_filter(x=dat_.T, Fs=self.sample_rate, trans_bandwidth=7,
