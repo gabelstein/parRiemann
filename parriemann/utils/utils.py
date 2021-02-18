@@ -19,52 +19,15 @@ class SlidingWindow(BaseEstimator, TransformerMixin):
         if y is None:
             return _sliding_windows(X,self.window_size,self.step_size)
         else:
-            return self._slide(X, y)
+            X_, y_ = _slide(X, y, self.window_size, self.step_size, self.adjust_class_size)
+            return np.array(X_), np.array(y_)
 
     def fit_transform(self, X, y):
-        X_, y_ = self._slide(X, y)
-        return X_, y_
-
-    def _slide(self, data, label):
-        if len(data) != len(label):
-            raise ValueError("Data and labels must have same length.")
-        Nt = (len(data) - self.window_size) // self.step_size + 1
-        Nc = data.shape[1]
-        Nw = self.window_size
-        X_ = np.zeros((Nt, Nc, Nw))
-        y_ = np.zeros((Nt))
-
-        for i in range(Nt):
-            X_[i] = data[i * self.step_size:i * self.step_size + self.window_size].T
-            tmpy = label[i * self.step_size:i * self.step_size + self.window_size]
-            if np.unique(tmpy).size == 1:
-                y_[i] = tmpy.mean() * math.copysign(1, np.diff(tmpy).sum())
-            else:
-                y_[i] = np.inf
-
-        X_ = X_[np.isfinite(y_)]
-        y_ = y_[np.isfinite(y_)].astype(int)
-
-        if self.adjust_class_size:
-            classes = np.unique(y_)
-            Nc = classes.size
-            counts = np.zeros(Nc)
-            for i in range(Nc):
-                counts[i] = np.count_nonzero(y_ == classes[i])
-            min_count = np.min(counts.astype(int))
-            X_adj = []
-            y_adj = []
-            for i in range(Nc):
-                y_c = y_[y_ == classes[i]]
-                X_c = X_[y_ == classes[i]]
-                subsamples = np.random.choice(len(y_c), min_count, replace=False)
-                y_adj.extend(y_c[subsamples])
-                X_adj.extend(X_c[subsamples])
-
-            return np.array(X_adj), np.array(y_adj)
-
-
-        return X_, y_
+        if y is None:
+            return _sliding_windows(X,self.window_size,self.step_size)
+        else:
+            X_, y_ = _slide(X, y, self.window_size, self.step_size, self.adjust_class_size)
+            return np.array(X_), np.array(y_)
 
     def _labeled_windows(self, data, label):
         """
@@ -117,6 +80,47 @@ class SlidingWindow(BaseEstimator, TransformerMixin):
             start += sub_len
 
         return X_, y_
+
+
+# TODO: rewrite for numba
+def _slide(data, label, window_size, step_size, adjust_class_size):
+    if len(data) != len(label):
+        raise ValueError("Data and labels must have same length.")
+    Nt = (len(data) - window_size) // step_size + 1
+    Nc = data.shape[1]
+    Nw = window_size
+    X_ = np.zeros((Nt, Nc, Nw))
+    y_ = np.zeros((Nt))
+
+    for i in range(Nt):
+        X_[i] = data[i * step_size:i * step_size + window_size].T
+        tmpy = label[i * step_size:i * step_size + window_size]
+        if np.unique(tmpy).size == 1:
+            y_[i] = tmpy.mean() * math.copysign(1, np.diff(tmpy).sum())
+        else:
+            y_[i] = np.inf
+
+    X_ = X_[np.isfinite(y_)]
+    y_ = y_[np.isfinite(y_)]
+
+    if adjust_class_size:
+        classes = np.unique(y_)
+        Nc = classes.size
+        counts = []
+        for i in range(Nc):
+            counts.append(np.count_nonzero(y_ == classes[i]))
+        min_count = np.min(np.array(counts))
+        X_adj = []
+        y_adj = []
+        for i in range(Nc):
+            y_c = y_[y_ == classes[i]]
+            X_c = X_[y_ == classes[i]]
+            subsamples = np.random.choice(len(y_c), min_count, replace=False)
+            y_adj.extend(y_c[subsamples])
+            X_adj.extend(X_c[subsamples])
+        return np.array(X_adj), np.array(y_adj)
+
+    return X_, y_
 
 
 @njit(parallel=True)
