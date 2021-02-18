@@ -83,7 +83,7 @@ class SlidingWindow(BaseEstimator, TransformerMixin):
 
 
 # TODO: rewrite for numba
-def _slide(data, label, window_size, step_size, adjust_class_size):
+def _slide(data, label, window_size, step_size, adjust_class_size, allow_overlap=False):
     if len(data) != len(label):
         raise ValueError("Data and labels must have same length.")
     Nt = (len(data) - window_size) // step_size + 1
@@ -91,6 +91,12 @@ def _slide(data, label, window_size, step_size, adjust_class_size):
     Nw = window_size
     X_ = np.zeros((Nt, Nc, Nw))
     y_ = np.zeros((Nt))
+    if allow_overlap:
+        for i in range((len(data) - window_size) // step_size):
+            X_[i] = data[i * step_size:i * step_size + window_size].T
+            y_[i] = label[i * step_size:i * step_size + window_size].mean() * math.copysign(1, np.diff(
+                label[i * step_size:i * step_size + window_size]).sum())
+        return X_, y_
 
     for i in range(Nt):
         X_[i] = data[i * step_size:i * step_size + window_size].T
