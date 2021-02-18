@@ -17,8 +17,15 @@ def test_labeled_windows():
     labels = np.concatenate((np.repeat(1, 10), np.repeat(0, 10)))
     clf = SlidingWindow(10, 2)
     X, y = clf.transform(data, labels)
+    assert_array_equal(data[:10], X[1].T)
+    assert_array_equal(data[10:], X[0].T)
+
+def test_labeled_windows2():
+    data = np.random.rand(19, 3)
+    labels = np.concatenate((np.repeat(1, 10), np.repeat(0, 9)))
+    clf = SlidingWindow(10, 2)
+    X, y = clf.transform(data, labels)
     assert_array_equal(data[:10], X[0].T)
-    assert_array_equal(data[10:], X[1].T)
 
 
 def test_labeled_windows_raise():
