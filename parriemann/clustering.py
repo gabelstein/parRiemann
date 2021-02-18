@@ -3,8 +3,7 @@ import numpy
 from sklearn.base import (BaseEstimator, ClassifierMixin, TransformerMixin,
                           ClusterMixin)
 from sklearn.cluster._kmeans import KMeans
-
-_init_centroids = KMeans._init_centroids
+from sklearn.utils import check_random_state
 from joblib import Parallel, delayed
 
 from .classification import MDM
@@ -20,7 +19,7 @@ def _fit_single(X, y=None, n_clusters=2, init='random', random_state=None,
     mdm = MDM(metric=metric, n_jobs=n_jobs)
     squared_nomrs = [numpy.linalg.norm(x, ord='fro') ** 2 for x in X]
     mdm.covmeans_ = KMeans(n_clusters=n_clusters)._init_centroids(X, init=init,
-                                                                  random_state=random_state,
+                                                                  random_state=check_random_state(random_state),
                                                                   x_squared_norms=squared_nomrs)
     if y is not None:
         mdm.classes_ = numpy.unique(y)
