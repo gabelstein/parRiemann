@@ -79,9 +79,12 @@ class SlidingWindow(BaseEstimator, TransformerMixin):
 
 @njit(parallel=True)
 def _sliding_windows(data, window_size, shift):
-    Nt, Ne = data.shape
     Nw = (data.shape[0] - window_size) // shift + 1
-    _dat = np.zeros((Nw, Ne, window_size))
+    if data.ndim == 1:
+        _dat = np.zeros((Nw, window_size))
+    if data.ndim == 2:
+        Nt, Ne = data.shape
+        _dat = np.zeros((Nw, Ne, window_size))
     for i in range(Nw):
         _dat[i] = data[i * shift:i * shift + window_size].T
     return _dat
@@ -197,6 +200,11 @@ class BandPassFilter(BaseEstimator, TransformerMixin):
         self.filter_len = filter_len
         self.l_trans_bandwidth = l_trans_bandwidth
         self.h_trans_bandwidth = h_trans_bandwidth
+        self.filters = self._calc_band_filters(self.filter_bands,
+                                               self.sample_rate,
+                                               self.filter_len,
+                                               self.l_trans_bandwidth,
+                                               self.h_trans_bandwidth)
 
     def fit(self, X, y):
         self.filters = self._calc_band_filters(self.filter_bands,
@@ -204,7 +212,6 @@ class BandPassFilter(BaseEstimator, TransformerMixin):
                                                self.filter_len,
                                                self.l_trans_bandwidth,
                                                self.h_trans_bandwidth)
-
         return self
 
     def transform(self, X, y=None):
