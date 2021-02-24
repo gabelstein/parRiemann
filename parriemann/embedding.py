@@ -1,9 +1,11 @@
 """Embedding covariance matrices via manifold learning techniques."""
 
 import numpy as np
-from sklearn.base import BaseEstimator
+from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.manifold import spectral_embedding
-from parriemann.utils.distance import pairwise_distance
+from parriemann.utils.distance import pairwise_distance, distance
+import umap
+from numba import njit
 
 
 class Embedding(BaseEstimator):
@@ -101,3 +103,50 @@ class Embedding(BaseEstimator):
         """
         self.fit(X)
         return self.embedding_
+
+
+class UMapper(BaseEstimator, TransformerMixin):
+    """
+    Wrapper for UMAP for dimensionality reduction on positive definite matrices with a Riemannian metric
+
+    Parameters
+    ----------
+    metric : str (default 'riemann')
+        string code for the metric from .utils.distance
+    **kwargs : dict
+        arguments to pass to umap.
+
+    """
+
+    def __init__(self, distance_metric='riemann', **kwargs):
+        self.distance_metric = distance_metric
+        self.umap_args = kwargs
+        self.umapfitter = umap.UMAP(
+            metric=_umap_metric_helper,
+            metric_kwds={'distance_metric': self.distance_metric},
+            **kwargs
+        )
+
+    def fit(self, X, y):
+        Xre = np.reshape(X, (len(X), -1))
+        self.umapfitter.fit(Xre, y)
+        return self
+
+    def transform(self, X, y=None):
+        Xre = np.reshape(X, (len(X), -1))
+        X_ = self.umapfitter.transform(Xre)
+        return X_
+
+    def fit_transform(self, X, y=None):
+        Xre = np.reshape(X, (len(X), -1))
+        self.umapfitter.fit(Xre, y)
+        X_ = self.umapfitter.transform(Xre)
+        return X_
+
+@njit
+def _umap_metric_helper(A, B, distance_metric='riemann'):
+    dim = int(np.sqrt(len(A)))
+    A_ = np.reshape(A, (dim, dim)).astype(np.float64) #umap casts to float32 for some reason, crashing the metric
+    B_ = np.reshape(B, (dim, dim)).astype(np.float64)
+
+    return distance(A_, B_, distance_metric)

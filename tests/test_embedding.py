@@ -1,6 +1,6 @@
 import numpy as np
 
-from parriemann.embedding import Embedding
+from parriemann.embedding import Embedding, UMapper
 from numpy.testing import assert_array_equal
 
 
@@ -20,3 +20,12 @@ def test_embedding():
     covmats, diags, A = generate_cov(100, 3)
     embd = Embedding(metric='riemann', n_components=2).fit_transform(covmats)
     assert_array_equal(embd.shape[1], 2)
+
+def test_umapper():
+    """Test Embedding."""
+    covmats, diags, A = generate_cov(100, 3)
+    labels = np.random.randint(0, 1, 100)
+    embd = UMapper(distance_metric='riemann', n_components=2, n_neighbors=5).fit_transform(covmats)
+    assert_array_equal(embd.shape[1], 2)
+    embd2 = UMapper(distance_metric='riemann', n_components=2, n_neighbors=5).fit_transform(covmats, labels)
+    assert_array_equal(embd2.shape[1], 2)
