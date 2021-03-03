@@ -288,7 +288,7 @@ def _slide(data, label, window_size, step_size, adjust_class_size, allow_overlap
         for i in range(Nc):
             y_c = y_[y_ == classes[i]]
             X_c = X_[y_ == classes[i]]
-            subsamples = np.random.choice(len(y_c), min_count, replace=False)
+            subsamples = np.round(np.linspace(0, len(y_c) - 1, min_count)).astype(int)
             y_adj.extend(y_c[subsamples])
             X_adj.extend(X_c[subsamples])
         return np.array(X_adj), np.array(y_adj)
