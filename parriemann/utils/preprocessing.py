@@ -2,6 +2,7 @@ import mne as mne
 import scipy
 from numba import njit, prange
 import numpy as np
+from scipy.stats import zscore
 from sklearn.base import TransformerMixin, BaseEstimator
 import math
 
@@ -16,17 +17,16 @@ class ZScore(BaseEstimator, TransformerMixin):
             Line noise
         """
 
-    def __init__(self, mean=None, std=None):
+    def __init__(self, mean=None, std=None, axis=0):
         self.mean = mean
         self.std = std
+        self.axis = axis
 
-    def fit(self, X, y):
-        self.mean = X.mean(axis=0)
-        self.std = np.std(X, axis=0)
+    def fit(self, X, y=None):
         return self
 
-    def transform(self, X):
-        return (X - self.mean) / self.std
+    def transform(self, X, y=None):
+        return zscore(X, axis=self.axis)
 
 
 class Rereferencing(BaseEstimator, TransformerMixin):
@@ -44,10 +44,10 @@ class Rereferencing(BaseEstimator, TransformerMixin):
         self.reref_idx = reref_idx
         self.reref_function = self.reref_methods[method]
 
-    def fit(self, X, y):
+    def fit(self, X, y=None):
         return self
 
-    def transform(self, X):
+    def transform(self, X, y=None):
         return self.reref_function(self, X)
 
     def fit_transform(self, X, y=None):
@@ -101,7 +101,7 @@ class BandPassFilter(BaseEstimator, TransformerMixin):
                                                self.l_trans_bandwidth,
                                                self.h_trans_bandwidth)
 
-    def fit(self, X, y):
+    def fit(self, X, y=None):
         self.filters = self._calc_band_filters(self.filter_bands,
                                                self.sample_rate,
                                                self.filter_len,
@@ -113,7 +113,7 @@ class BandPassFilter(BaseEstimator, TransformerMixin):
         X_ = self._apply_filter(X, self.filters)
         return X_
 
-    def fit_transform(self, X, y):
+    def fit_transform(self, X, y=None):
         self.filters = self._calc_band_filters(self.filter_bands,
                                                self.sample_rate,
                                                self.filter_len,
@@ -205,7 +205,7 @@ class NotchFilter(BaseEstimator, TransformerMixin):
         self.sample_rate = sample_rate
         self.line_noise = line_noise
 
-    def fit(self, X, y):
+    def fit(self, X, y=None):
         return self
 
     def transform(self, X, y=None):
@@ -226,26 +226,27 @@ class NotchFilter(BaseEstimator, TransformerMixin):
 
 
 class SlidingWindow(BaseEstimator, TransformerMixin):
-    def __init__(self, window_size, step_size, adjust_class_size=True):
+    def __init__(self, window_size, step_size, adjust_class_size=True, allow_overlap=False):
         self.window_size = window_size
         self.step_size = step_size
         self.adjust_class_size = adjust_class_size
+        self.allow_overlap = allow_overlap
 
-    def fit(self, X, y):
+    def fit(self, X, y=None):
         return self
 
     def transform(self, X, y=None):
         if y is None:
             return _sliding_windows(X,self.window_size,self.step_size)
         else:
-            X_, y_ = _slide(X, y, self.window_size, self.step_size, self.adjust_class_size)
+            X_, y_ = _slide(X, y, self.window_size, self.step_size, self.adjust_class_size, self.allow_overlap)
             return np.array(X_), np.array(y_)
 
     def fit_transform(self, X, y):
         if y is None:
             return _sliding_windows(X,self.window_size,self.step_size)
         else:
-            X_, y_ = _slide(X, y, self.window_size, self.step_size, self.adjust_class_size)
+            X_, y_ = _slide(X, y, self.window_size, self.step_size, self.adjust_class_size, self.allow_overlap)
             return np.array(X_), np.array(y_)
 
 
