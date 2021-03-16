@@ -1,12 +1,13 @@
 """Estimation of covariance matrices."""
 import numpy
+import scipy
+from scipy.linalg import block_diag
 
 from .spatialfilters import Xdawn
 from .utils.covariance import (covariances, covariances_EP, cospectrum,
                                coherence)
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.covariance import shrunk_covariance
-
 
 def _nextpow2(i):
     """Find next power of 2."""
@@ -590,3 +591,68 @@ class Shrinkage(BaseEstimator, TransformerMixin):
             covmats[ii] = shrunk_covariance(x, self.shrinkage)
 
         return covmats
+
+
+class BlockCovariances(BaseEstimator, TransformerMixin):
+    """Estimation of covariance matrix.
+
+    Perform a simple covariance matrix estimation for each given trial.
+
+    Parameters
+    ----------
+    estimator : string (default: 'scm')
+        covariance matrix estimator. For regularization consider 'lwf' or 'oas'
+        For a complete list of estimator, see `utils.covariance`.
+
+    See Also
+    --------
+    ERPCovariances
+    XdawnCovariances
+    CospCovariances
+    HankelCovariances
+    """
+
+    def __init__(self, modalities, estimator='scm'):
+        """Init."""
+        self.estimator = estimator
+        self.modalities = modalities
+
+    def fit(self, X, y=None):
+        """Fit.
+
+        Do nothing. For compatibility purpose.
+
+        Parameters
+        ----------
+        X : ndarray, shape (n_trials, n_channels, n_samples)
+            ndarray of trials.
+        y : ndarray shape (n_trials,)
+            labels corresponding to each trial, not used.
+
+        Returns
+        -------
+        self : Covariances instance
+            The Covariances instance.
+        """
+        return self
+
+    def transform(self, X):
+        """Estimate covariance matrices.
+
+        Parameters
+        ----------
+        X : ndarray, shape (n_trials, n_channels, n_samples)
+            ndarray of trials.
+
+        Returns
+        -------
+        covmats : ndarray, shape (n_trials, n_channels, n_channels)
+            ndarray of covariance matrices for each trials.
+        """
+        covmats = covariances(X, estimator=self.estimator)
+        self.block_size = X.shape[1]//self.modalities
+        Nblocks = X.shape[1]//self.block_size
+        diag_idx = block_diag(*tuple([numpy.ones((self.block_size, self.block_size)) for n in range(Nblocks)]))
+        block_diags = numpy.array([cov*diag_idx for cov in covmats])
+
+        return block_diags

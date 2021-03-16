@@ -1,6 +1,37 @@
-from numba import njit
+from numba import njit, prange
 import numpy as np
 from .preprocessing import _sliding_windows
+from .base import invsqrtm
+from .mean import mean_riemann
+
+@njit
+def riemann_kernel(A, B, G_invsq):
+    A_ = G_invsq@A@G_invsq
+    B_ = G_invsq@B@G_invsq
+    return np.trace(A_@B_)
+
+
+@njit(parallel=True)
+def riemann_kernel_matrix(X, Y):
+    G = mean_riemann(X)
+    G_invsq = invsqrtm(G)
+    Ntx, Ne, Ne = X.shape
+
+    X_ = np.zeros((Ntx, Ne, Ne))
+    for index in prange(Ntx):
+        X_[index] = G_invsq@X[index]@G_invsq
+
+    Nty, Ne, Ne = Y.shape
+    Y_ = np.zeros((Nty, Ne, Ne))
+    for index in prange(Nty):
+        Y_[index] = G_invsq @ Y[index] @ G_invsq
+
+    res = np.zeros((Nty, Ntx))
+    for i in prange(Nty):
+        for j in prange(Ntx):
+            res[i][j] = np.trace(Y_[i]@X_[j])
+    return res
+
 
 #just for testing purposes
 def _labeled_windows(self, data, label):
